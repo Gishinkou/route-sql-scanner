@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<mapper namespace="com.acme.BadMapper">
+  <select id="dynamicTable" resultType="map">
+    SELECT id, order_id
+    FROM ${tableName}
+    WHERE order_id = #{orderId}
+  </select>
+</mapper>

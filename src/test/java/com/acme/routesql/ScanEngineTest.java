@@ -1,0 +1,47 @@
+package com.acme.routesql;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.acme.routesql.config.ScannerConfig;
+import com.acme.routesql.core.ScanEngine;
+import com.acme.routesql.model.ScanReport;
+import com.acme.routesql.report.JsonReporter;
+import com.acme.routesql.report.JsonlReporter;
+import com.acme.routesql.report.MarkdownReporter;
+import java.nio.file.Path;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+class ScanEngineTest {
+  @Test
+  void scansFixturesAndReportsRouteDiagnostics() throws Exception {
+    Path fixtureDir = Path.of("src/test/resources/fixtures").toAbsolutePath();
+    ScannerConfig config = ScannerConfig.load(fixtureDir.resolve("route-sql.yml"));
+
+    ScanReport report = new ScanEngine(config).scan(List.of(fixtureDir), List.of(), List.of());
+
+    assertEquals(7, report.summary().sqlCount());
+    assertTrue(report.sqlObjects().stream()
+        .anyMatch(sql -> "com.acme.OrderMapper.findOrders".equals(sql.identity().logicalName())));
+    assertTrue(report.sqlObjects().stream().anyMatch(sql -> sql.origin().kind().name().equals("JAVA_JDBC")));
+    assertTrue(report.sqlObjects().stream().allMatch(sql -> sql.identity().stableId().length() == 64));
+    assertTrue(report.sqlObjects().stream()
+        .anyMatch(sql -> sql.parse().tables().contains("orders")));
+    assertFalse(report.diagnostics().isEmpty());
+    assertTrue(report.diagnostics().stream()
+        .anyMatch(diagnostic -> diagnostic.snippet().contains("WHERE id = ?")));
+  }
+
+  @Test
+  void rendersAllReportFormats() throws Exception {
+    Path fixtureDir = Path.of("src/test/resources/fixtures").toAbsolutePath();
+    ScannerConfig config = ScannerConfig.load(fixtureDir.resolve("route-sql.yml"));
+    ScanReport report = new ScanEngine(config).scan(List.of(fixtureDir), List.of(), List.of());
+
+    assertTrue(new JsonReporter().render(report).contains("\"diagnostics\""));
+    assertTrue(new JsonlReporter().render(report).contains("\"type\":\"summary\""));
+    assertTrue(new MarkdownReporter().render(report).contains("Route SQL Scan Report"));
+  }
+}

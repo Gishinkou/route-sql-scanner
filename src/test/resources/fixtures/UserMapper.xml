@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<mapper namespace="com.acme.UserMapper">
+  <select id="findUser" resultType="map">
+    SELECT id, tenant_id, name
+    FROM users
+    WHERE tenant_id = #{tenantId}
+      AND id = #{id}
+  </select>
+</mapper>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<mapper namespace="com.acme.OrderMapper">
+  <sql id="BaseColumns">
+    id, tenant_id, order_id, status
+  </sql>
+
+  <select id="findOrders" resultType="map">
+    SELECT <include refid="BaseColumns"/>
+    FROM orders
+    <where>
+      <if test="status != null">
+        AND status = #{status}
+      </if>
+      <if test="tenantId != null">
+        AND tenant_id = #{tenantId}
+      </if>
+    </where>
+  </select>
+
+  <update id="badUpdate">
+    UPDATE orders
+    <set>
+      status = #{status},
+    </set>
+    WHERE id = #{id}
+  </update>
+</mapper>

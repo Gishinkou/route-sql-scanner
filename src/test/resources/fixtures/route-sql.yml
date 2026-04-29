@@ -1,0 +1,7 @@
+dialect: mysql
+routeRules:
+  defaultSeverity: ERROR
+  tables:
+    orders:
+      routeFields: [tenant_id, order_id]
+      operations: [SELECT, UPDATE, DELETE, INSERT]
