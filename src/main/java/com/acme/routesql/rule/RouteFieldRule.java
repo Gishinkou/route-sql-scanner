@@ -37,12 +37,12 @@ public class RouteFieldRule implements SqlRule {
         if (!referencesTable(sql, table) || !operationEnabled(tableRule, operation)) {
           continue;
         }
-        if (!hasRouteField(sql, tableRule.getRouteFields(), operation)) {
+        List<String> missingFields = missingRouteFields(sql, tableRule, operation);
+        if (!missingFields.isEmpty()) {
           diagnostics.add(new Diagnostic(
               ID,
               config.getDefaultSeverity(),
-              "SQL references table `" + table + "` but does not constrain any route field: "
-                  + String.join(", ", tableRule.getRouteFields()),
+              message(table, tableRule, missingFields),
               sql.identity().stableId(),
               sql.origin(),
               table,
@@ -69,18 +69,27 @@ public class RouteFieldRule implements SqlRule {
     return rule.getOperations().stream().anyMatch(op -> op.equalsIgnoreCase(operation));
   }
 
-  private boolean hasRouteField(SqlObject sql, List<String> routeFields, String operation) {
+  private List<String> missingRouteFields(SqlObject sql, RouteRuleConfig.TableRule tableRule, String operation) {
+    List<String> routeFields = tableRule.getRouteFields();
+    if (routeFields == null || routeFields.isEmpty()) {
+      return List.of();
+    }
     String searchable = "INSERT".equalsIgnoreCase(operation)
         ? insertColumnSegment(sql.normalizedSql())
         : whereSegment(sql.normalizedSql());
+    List<String> missing = new ArrayList<>();
     for (String routeField : routeFields) {
       Pattern fieldPattern = Pattern.compile("(?i)(?:\\b|`|\\.)" + Pattern.quote(routeField) + "(?:\\b|`)");
       Matcher matcher = fieldPattern.matcher(searchable);
-      if (matcher.find()) {
-        return true;
+      boolean found = matcher.find();
+      if (!tableRule.isRequireAllRouteFields() && found) {
+        return List.of();
+      }
+      if (tableRule.isRequireAllRouteFields() && !found) {
+        missing.add(routeField);
       }
     }
-    return false;
+    return tableRule.isRequireAllRouteFields() ? missing : routeFields;
   }
 
   private String whereSegment(String sql) {
@@ -98,5 +107,14 @@ public class RouteFieldRule implements SqlRule {
       return sql;
     }
     return sql.substring(0, 217) + "...";
+  }
+
+  private String message(String table, RouteRuleConfig.TableRule tableRule, List<String> missingFields) {
+    if (tableRule.isRequireAllRouteFields()) {
+      return "SQL references table `" + table + "` but WHERE/INSERT columns miss required route fields: "
+          + String.join(", ", missingFields);
+    }
+    return "SQL references table `" + table + "` but does not constrain any route field: "
+        + String.join(", ", tableRule.getRouteFields());
   }
 }

@@ -28,6 +28,7 @@ public class RouteRuleConfig {
   public static class TableRule {
     private List<String> routeFields = new ArrayList<>();
     private List<String> operations = List.of("SELECT", "UPDATE", "DELETE", "INSERT");
+    private boolean requireAllRouteFields = false;
 
     public List<String> getRouteFields() {
       return routeFields;
@@ -43,6 +44,14 @@ public class RouteRuleConfig {
 
     public void setOperations(List<String> operations) {
       this.operations = operations;
+    }
+
+    public boolean isRequireAllRouteFields() {
+      return requireAllRouteFields;
+    }
+
+    public void setRequireAllRouteFields(boolean requireAllRouteFields) {
+      this.requireAllRouteFields = requireAllRouteFields;
     }
   }
 }

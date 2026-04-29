@@ -1,0 +1,11 @@
+{
+  "dialect": "mysql",
+  "defaultSeverity": "ERROR",
+  "tables": [
+    {
+      "name": "orders",
+      "requiredColumns": ["tenant_id", "order_id"],
+      "operations": ["SELECT", "UPDATE", "DELETE"]
+    }
+  ]
+}

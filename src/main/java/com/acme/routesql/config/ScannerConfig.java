@@ -16,7 +16,9 @@ public class ScannerConfig {
     ObjectMapper mapper = path.toString().endsWith(".json")
         ? new ObjectMapper()
         : new ObjectMapper(new YAMLFactory());
-    ScannerConfig config = mapper.readValue(path.toFile(), ScannerConfig.class);
+    var tree = mapper.readTree(path.toFile());
+    tree = new ConfigPreprocessors().preprocess(tree, mapper);
+    ScannerConfig config = mapper.treeToValue(tree, ScannerConfig.class);
     if (config.routeRules == null) {
       config.routeRules = new RouteRuleConfig();
     }

@@ -54,6 +54,35 @@ routeRules:
 
 如果只是想先提取 SQL，不关心诊断，可以不传 `--config`，工具会使用默认空规则。
 
+也可以使用更轻量的 JSON 格式表达“指定表名和必要列名”。这种格式会经过内置预处理 hook 转换成内部规则模型：
+
+```json
+{
+  "dialect": "mysql",
+  "defaultSeverity": "ERROR",
+  "tables": [
+    {
+      "name": "orders",
+      "requiredColumns": ["tenant_id", "order_id"],
+      "operations": ["SELECT", "UPDATE", "DELETE"]
+    },
+    {
+      "name": "order_item",
+      "requiredColumns": ["tenant_id", "order_id"]
+    }
+  ]
+}
+```
+
+轻量 JSON 语义：
+
+- `name`：表名，也兼容 `table`、`tableName`。
+- `requiredColumns`：WHERE 中必须出现的路由列，也兼容 `columns`、`routeColumns`、`routeFields`。
+- `operations`：默认是 `SELECT/UPDATE/DELETE`。
+- `requireAll`：默认是 `true`，表示必要列必须全部出现。设为 `false` 时，出现任意一个路由列即可。
+
+旧的 `routeRules.tables.*.routeFields` 配置默认仍是“任意一个命中即可”，不会被这个新格式改变语义。
+
 ## 3. 扫描另一个 Java 项目
 
 假设：
@@ -207,6 +236,17 @@ JSON 顶层大致是：
   "tableName": "orders",
   "expectedRouteFields": ["tenant_id", "order_id"],
   "snippet": "SELECT id, status FROM orders WHERE id = ?"
+}
+```
+
+如果使用轻量 JSON 的 `requiredColumns` 且缺少其中一部分字段，诊断消息会指出实际缺少哪些必要列：
+
+```json
+{
+  "id": "ROUTE-MISSING-001",
+  "message": "SQL references table `orders` but WHERE/INSERT columns miss required route fields: order_id",
+  "tableName": "orders",
+  "expectedRouteFields": ["tenant_id", "order_id"]
 }
 ```
 

@@ -104,9 +104,15 @@ ScanReport
 配置：
 
 - `src/main/java/com/acme/routesql/config/ScannerConfig.java`
-  读取 YAML/JSON 配置，默认 dialect 为 `mysql`。
+  读取 YAML/JSON 配置，默认 dialect 为 `mysql`。读取后会先经过 `ConfigPreprocessors`，再绑定到 `ScannerConfig`。
 - `src/main/java/com/acme/routesql/config/RouteRuleConfig.java`
-  `routeRules` 配置模型，对应 `tables.<table>.routeFields/operations`。
+  `routeRules` 配置模型，对应 `tables.<table>.routeFields/operations/requireAllRouteFields`。
+- `src/main/java/com/acme/routesql/config/ConfigPreprocessor.java`
+  配置预处理 hook。后续如果用户输入 JSON 和内部模型不一致，在这里扩展适配器。
+- `src/main/java/com/acme/routesql/config/ConfigPreprocessors.java`
+  预处理器注册表。
+- `src/main/java/com/acme/routesql/config/RequiredColumnsJsonPreprocessor.java`
+  当前内置轻量 JSON 适配器，支持 `tables[].name + requiredColumns[]`，并默认转换成 `requireAllRouteFields=true`。
 
 扫描编排：
 
@@ -162,8 +168,10 @@ Java JDBC：
   规则接口。
 - `src/main/java/com/acme/routesql/rule/RouteFieldRule.java`
   当前唯一诊断规则。
-  SELECT/UPDATE/DELETE 检查 WHERE 片段中是否出现任一路由字段。
-  INSERT 检查 insert column list 是否包含任一路由字段。
+  SELECT/UPDATE/DELETE 检查 WHERE 片段中是否出现路由字段。
+  INSERT 检查 insert column list 是否包含路由字段。
+  当 `requireAllRouteFields=false` 时保持旧语义：出现任意一个 route field 即满足。
+  当 `requireAllRouteFields=true` 时使用必要列语义：所有 route fields 都必须出现，否则诊断会列出缺少字段。
   AST 解析失败时也会基于 normalized SQL 做文本兜底。
 
 报告：
@@ -269,10 +277,17 @@ java -jar target/route-sql-scanner-0.1.0.jar scan \
 
 增强 MyBatis 动态 SQL：
 
-1. 主要改 `MyBatisXmlExtractor.buildNode()`。
+1. 主要改 `MyBatisSqlScriptBuilder`。
 2. 保持 raw SQL 近似可解析。
 3. 遇到运行时不确定内容时标记 `dynamic=true`。
 4. 保持 namespace、statementId、line、column 不丢。
+
+新增输入 JSON 适配：
+
+1. 实现 `ConfigPreprocessor`。
+2. 在 `ConfigPreprocessors` 注册。
+3. 输出必须是内部 `ScannerConfig` 兼容 JSON tree。
+4. 如果表达“必要列全部出现”，设置 `routeRules.tables.<table>.requireAllRouteFields=true`。
 
 增强 Java 字符串求值：
 
@@ -309,7 +324,7 @@ java -jar target/route-sql-scanner-0.1.0.jar scan \
 - Java 只做同方法内简单字符串求值，不做完整符号解析。
 - Java 对 `jdbcTemplate.query/update` 做 JDBC-like 支持，但没有验证接收者类型。
 - 字段提取不完整，规则实际主要依赖 normalized SQL 的 WHERE/INSERT 文本片段。
-- 多表 SQL 只做“字段出现即满足”，没有做谓词可达性、表别名字段归属和 join 条件严谨分析。
+- 多表 SQL 只做“字段出现即满足/必要字段出现”的文本级判断，没有做谓词可达性、表别名字段归属和 join 条件严谨分析。
 - `<sql>` fragment 会作为 `FRAGMENT` 进入 SQL 清单，但多数 fragment 不是完整 SQL，parse 可能失败；这是预期行为。
 
 ## 10. 工作区注意事项

@@ -53,4 +53,23 @@ class ScanEngineTest {
     assertTrue(normalizedSqlLines.contains("SELECT id, tenant_id, order_id FROM orders WHERE tenant_id = ?"));
     assertEquals(report.summary().sqlCount(), normalizedSqlLines.lines().count());
   }
+
+  @Test
+  void acceptsRequiredColumnsJsonAndRequiresEveryRouteColumn() throws Exception {
+    Path fixtureDir = Path.of("src/test/resources/fixtures").toAbsolutePath();
+    ScannerConfig config = ScannerConfig.load(fixtureDir.resolve("required-columns.json"));
+
+    ScanReport report = new ScanEngine(config)
+        .scan(List.of(fixtureDir.resolve("AnnotationOrderMapper.java")), List.of(), List.of());
+
+    assertEquals(3, report.summary().sqlCount());
+    assertEquals(3, report.summary().diagnosticCount());
+    assertTrue(report.diagnostics().stream()
+        .anyMatch(diagnostic -> diagnostic.origin().statementId().equals("findByTenant")
+            && diagnostic.message().contains("order_id")));
+    assertTrue(report.diagnostics().stream()
+        .anyMatch(diagnostic -> diagnostic.origin().statementId().equals("updateWithoutRoute")
+            && diagnostic.message().contains("tenant_id")
+            && diagnostic.message().contains("order_id")));
+  }
 }
