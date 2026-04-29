@@ -29,7 +29,7 @@ public final class SqlObjects {
 
   private static String logicalName(SqlOrigin origin) {
     return switch (origin.kind()) {
-      case MYBATIS_XML -> joinDot(origin.namespace(), origin.statementId());
+      case MYBATIS_XML, MYBATIS_ANNOTATION -> joinDot(origin.namespace(), origin.statementId());
       case JAVA_JDBC -> origin.className() + "#" + origin.methodName() + ":" + origin.line();
       default -> origin.file() + ":" + origin.line();
     };

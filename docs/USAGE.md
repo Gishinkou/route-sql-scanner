@@ -164,9 +164,9 @@ JSON 顶层大致是：
   "version": "0.1.0",
   "dialect": "mysql",
   "summary": {
-    "filesScanned": 5,
-    "sqlCount": 7,
-    "diagnosticCount": 2
+    "filesScanned": 6,
+    "sqlCount": 10,
+    "diagnosticCount": 3
   },
   "sqlObjects": [],
   "diagnostics": []
@@ -229,6 +229,16 @@ MyBatis XML：
 - `<include refid="..."/>`
 - 常见动态标签的近似展开：`if/choose/when/otherwise/foreach/trim/where/set/bind`
 
+MyBatis 注解：
+
+- `@Select`
+- `@Insert`
+- `@Update`
+- `@Delete`
+- 支持单个字符串：`@Select("SELECT ...")`
+- 支持字符串数组：`@Select({"SELECT ...", "FROM ..."})`
+- 支持注解里的 `<script>/<where>/<if>` 等动态标签近似展开
+
 Java：
 
 - `connection.prepareStatement("SELECT ...")`
@@ -245,6 +255,7 @@ Java：
 
 - 工具是静态扫描，不连接数据库，也不执行 SQL。
 - MyBatis 动态 SQL 是近似重建，不模拟真实运行时所有分支。
+- MyBatis 注解的 `@SelectProvider/@InsertProvider/@UpdateProvider/@DeleteProvider` 暂不提取，因为 SQL 来自 provider 方法。
 - Java 代码不做完整跨文件符号解析。
 - 路由字段规则 V0 是“字段出现即满足”，不会完整判断谓词可达性。
 - `<sql>` fragment 会进入 SQL 清单，但 fragment 往往不是完整 SQL，解析失败是正常现象。
@@ -263,7 +274,6 @@ java -jar target/route-sql-scanner-0.1.0.jar scan \
 
 预期能看到：
 
-- `filesScanned = 5`
-- `sqlCount = 7`
-- `diagnosticCount = 2`
-
+- `filesScanned = 6`
+- `sqlCount = 10`
+- `diagnosticCount = 3`

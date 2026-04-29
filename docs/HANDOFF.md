@@ -7,7 +7,7 @@
 `route-sql-scanner` 是一个 Java 17 CLI/fat jar 工具，当前 V0 目标是：
 
 - 扫描文件或目录。
-- 从 MyBatis XML mapper 与 Java JDBC-like 调用中静态提取 SQL。
+- 从 MyBatis XML mapper、MyBatis 注解 mapper 与 Java JDBC-like 调用中静态提取 SQL。
 - 建立统一 `SqlObject` 模型，保留 stable id、source origin、mapper statement id 等身份信息。
 - 用 JSqlParser 解析 SQL，提取 statement type、表名、基础字段信息。
 - 按配置诊断指定表是否缺少路由字段。
@@ -44,9 +44,9 @@ java -jar target/route-sql-scanner-0.1.0.jar scan \
 
 当前 fixture 预期：
 
-- 扫描文件数：5
-- SQL/fragment 数：7
-- 诊断数：2
+- 扫描文件数：6
+- SQL/fragment 数：10
+- 诊断数：3
 - fat jar 路径：`target/route-sql-scanner-0.1.0.jar`
 
 注意：第一次 Maven 运行可能需要写 `~/.m2` 下载依赖或插件。如果在沙箱里失败，需要申请提升权限后重跑同一 Maven 命令。
@@ -61,6 +61,7 @@ Main
       -> discover files
       -> SqlExtractor.extract()
          - MyBatisXmlExtractor
+         - MyBatisAnnotationExtractor
          - JavaJdbcStatementExtractor
       -> SqlParserFacade.parse()
       -> RouteFieldRule.apply()
@@ -129,6 +130,16 @@ MyBatis XML：
   使用 DOM 解析 XML，不依赖 MyBatis runtime。
   当前支持 `<select>/<insert>/<update>/<delete>/<sql>`、`<include>`、常见动态标签近似展开、`#{}` 转 `?`、`${}` 转 `__DYNAMIC__`。
   `SqlOrigin` 会保留 namespace、statementId、statementType、file、line、column。
+
+MyBatis 注解：
+
+- `src/main/java/com/acme/routesql/extract/mybatis/MyBatisAnnotationExtractor.java`
+  使用 JavaParser 读取 mapper 方法上的 `@Select/@Insert/@Update/@Delete`。
+  支持单字符串、字符串数组、字符串拼接、text block。
+  注解内 `<script>/<where>/<if>` 等动态标签复用 `MyBatisSqlScriptBuilder` 近似展开。
+  暂不支持 `@SelectProvider/@InsertProvider/@UpdateProvider/@DeleteProvider`。
+- `src/main/java/com/acme/routesql/extract/mybatis/MyBatisSqlScriptBuilder.java`
+  XML mapper 和注解 mapper 共用的 MyBatis 动态 SQL 近似重建逻辑。
 
 Java JDBC：
 
@@ -202,7 +213,7 @@ OpenCode wrapper：
 
 - `contentHash = sha256(normalizedSql)`
 - `sourceKey = filePath + ":" + line + ":" + column`
-- MyBatis logicalName: `namespace + "." + statementId`
+- MyBatis XML/annotation logicalName: `namespace + "." + statementId`
 - Java logicalName: `className + "#" + methodName + ":" + line`
 - `stableId = sha256(sourceKind + "|" + logicalName + "|" + contentHash)`
 
@@ -248,6 +259,12 @@ java -jar target/route-sql-scanner-0.1.0.jar scan \
 5. 在 `ScanEngine` 的 `extractors` 列表注册。
 6. 增加 fixture 和 `ScanEngineTest` 断言。
 
+增强 MyBatis 注解 SQL：
+
+1. 主要改 `MyBatisAnnotationExtractor`。
+2. 注解内动态标签重建逻辑在 `MyBatisSqlScriptBuilder`。
+3. Provider 注解如果要支持，需要决定是否静态解析 provider 方法返回值，避免误判运行时 SQL。
+
 增强 MyBatis 动态 SQL：
 
 1. 主要改 `MyBatisXmlExtractor.buildNode()`。
@@ -284,6 +301,7 @@ java -jar target/route-sql-scanner-0.1.0.jar scan \
 ## 9. 当前 V0 简化点和风险
 
 - MyBatis 动态 SQL 是近似重建，不模拟所有运行时分支。
+- MyBatis 注解 mapper 当前只提取 `@Select/@Insert/@Update/@Delete`，不提取 provider 注解。
 - `<choose>` 当前把分支文本合并，可能出现不真实但有利于静态诊断的 SQL。
 - `<foreach>` 当前输出 `(__FOREACH__)` 并标记 dynamic。
 - Java 只做同方法内简单字符串求值，不做完整符号解析。

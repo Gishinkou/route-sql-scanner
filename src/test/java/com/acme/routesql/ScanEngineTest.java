@@ -22,16 +22,21 @@ class ScanEngineTest {
 
     ScanReport report = new ScanEngine(config).scan(List.of(fixtureDir), List.of(), List.of());
 
-    assertEquals(7, report.summary().sqlCount());
+    assertEquals(10, report.summary().sqlCount());
     assertTrue(report.sqlObjects().stream()
         .anyMatch(sql -> "com.acme.OrderMapper.findOrders".equals(sql.identity().logicalName())));
     assertTrue(report.sqlObjects().stream().anyMatch(sql -> sql.origin().kind().name().equals("JAVA_JDBC")));
+    assertTrue(report.sqlObjects().stream()
+        .anyMatch(sql -> "fixtures.AnnotationOrderMapper.findDynamic".equals(sql.identity().logicalName())
+            && sql.origin().kind().name().equals("MYBATIS_ANNOTATION")
+            && sql.dynamic()));
     assertTrue(report.sqlObjects().stream().allMatch(sql -> sql.identity().stableId().length() == 64));
     assertTrue(report.sqlObjects().stream()
         .anyMatch(sql -> sql.parse().tables().contains("orders")));
     assertFalse(report.diagnostics().isEmpty());
     assertTrue(report.diagnostics().stream()
         .anyMatch(diagnostic -> diagnostic.snippet().contains("WHERE id = ?")));
+    assertEquals(3, report.summary().diagnosticCount());
   }
 
   @Test

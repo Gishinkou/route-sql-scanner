@@ -4,6 +4,7 @@ import com.acme.routesql.config.ScannerConfig;
 import com.acme.routesql.extract.ExtractionContext;
 import com.acme.routesql.extract.SqlExtractor;
 import com.acme.routesql.extract.java.JavaJdbcStatementExtractor;
+import com.acme.routesql.extract.mybatis.MyBatisAnnotationExtractor;
 import com.acme.routesql.extract.mybatis.MyBatisXmlExtractor;
 import com.acme.routesql.model.Diagnostic;
 import com.acme.routesql.model.ScanReport;
@@ -30,7 +31,11 @@ public class ScanEngine {
 
   public ScanEngine(ScannerConfig config) {
     this.config = config;
-    this.extractors = List.of(new MyBatisXmlExtractor(), new JavaJdbcStatementExtractor());
+    this.extractors = List.of(
+        new MyBatisXmlExtractor(),
+        new MyBatisAnnotationExtractor(),
+        new JavaJdbcStatementExtractor()
+    );
     this.parser = new SqlParserFacade(config.getDialect());
     this.rules = List.of(new RouteFieldRule(config.getRouteRules()));
   }
