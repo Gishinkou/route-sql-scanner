@@ -10,6 +10,7 @@ import com.acme.routesql.model.ScanReport;
 import com.acme.routesql.report.JsonReporter;
 import com.acme.routesql.report.JsonlReporter;
 import com.acme.routesql.report.MarkdownReporter;
+import com.acme.routesql.report.NormalizedSqlReporter;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -48,5 +49,8 @@ class ScanEngineTest {
     assertTrue(new JsonReporter().render(report).contains("\"diagnostics\""));
     assertTrue(new JsonlReporter().render(report).contains("\"type\":\"summary\""));
     assertTrue(new MarkdownReporter().render(report).contains("Route SQL Scan Report"));
+    String normalizedSqlLines = new NormalizedSqlReporter().render(report);
+    assertTrue(normalizedSqlLines.contains("SELECT id, tenant_id, order_id FROM orders WHERE tenant_id = ?"));
+    assertEquals(report.summary().sqlCount(), normalizedSqlLines.lines().count());
   }
 }

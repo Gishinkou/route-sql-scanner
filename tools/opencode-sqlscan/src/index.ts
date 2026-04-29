@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-export type ScanFormat = "json" | "jsonl" | "markdown";
+export type ScanFormat = "json" | "jsonl" | "markdown" | "normalized" | "plain" | "sql" | "text";
 
 export interface ScanRouteSqlInput {
   path: string | string[];

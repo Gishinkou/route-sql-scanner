@@ -114,6 +114,19 @@ java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
   --fail-on NEVER
 ```
 
+输出 normalized SQL，一行一条，适合密集查看、grep 或 diff：
+
+```bash
+java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
+  -p /path/to/your-java-project \
+  -c /path/to/your-java-project/route-sql.yml \
+  -f normalized \
+  -o /path/to/your-java-project/route-sql-normalized.txt \
+  --fail-on NEVER
+```
+
+`normalized` 只输出 `sqlObjects[].normalizedSql`，不包含 summary、诊断、来源位置等元数据。也可以使用别名：`plain`、`sql`、`text`。
+
 不指定 `--output` 时，报告会输出到 stdout：
 
 ```bash

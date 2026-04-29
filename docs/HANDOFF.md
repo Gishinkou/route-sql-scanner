@@ -11,7 +11,7 @@
 - 建立统一 `SqlObject` 模型，保留 stable id、source origin、mapper statement id 等身份信息。
 - 用 JSqlParser 解析 SQL，提取 statement type、表名、基础字段信息。
 - 按配置诊断指定表是否缺少路由字段。
-- 输出 JSON、JSONL、Markdown 三种报告。
+- 输出 JSON、JSONL、Markdown、normalized SQL 文本报告。
 
 `README.md` 是项目设计文档，不一定等同于当前实现的完整事实。做改动时先读本交接文档和代码，再回看 README 作为需求来源。
 
@@ -172,6 +172,8 @@ Java JDBC：
 - `src/main/java/com/acme/routesql/report/JsonReporter.java`
 - `src/main/java/com/acme/routesql/report/JsonlReporter.java`
 - `src/main/java/com/acme/routesql/report/MarkdownReporter.java`
+- `src/main/java/com/acme/routesql/report/NormalizedSqlReporter.java`
+  只输出 `normalizedSql`，一行一个 SQL，不带元数据。
 
 模型：
 
@@ -199,7 +201,7 @@ OpenCode wrapper：
 测试与 fixtures：
 
 - `src/test/java/com/acme/routesql/ScanEngineTest.java`
-  端到端测试，覆盖提取、stable id、解析、诊断、三种报告。
+  端到端测试，覆盖提取、stable id、解析、诊断和报告格式。
 - `src/test/resources/fixtures/*.xml`
   MyBatis mapper fixture。
 - `src/test/resources/fixtures/*.java`
@@ -235,7 +237,7 @@ java -jar target/route-sql-scanner-0.1.0.jar scan \
 
 - `--path, -p`：可重复，文件或目录。
 - `--config, -c`：YAML/JSON。
-- `--format, -f`：`json | jsonl | markdown`。
+- `--format, -f`：`json | jsonl | markdown | normalized`。`normalized` 的别名是 `plain/sql/text`。
 - `--output, -o`：不填则 stdout。
 - `--include`：glob，可重复。
 - `--exclude`：glob，可重复。

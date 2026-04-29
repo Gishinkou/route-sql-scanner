@@ -6,6 +6,7 @@ import com.acme.routesql.model.ScanReport;
 import com.acme.routesql.report.JsonReporter;
 import com.acme.routesql.report.JsonlReporter;
 import com.acme.routesql.report.MarkdownReporter;
+import com.acme.routesql.report.NormalizedSqlReporter;
 import com.acme.routesql.report.Reporter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -25,7 +26,7 @@ public class ScanCommand implements Callable<Integer> {
   @Option(names = {"--config", "-c"}, description = "YAML or JSON scanner config.")
   private Path configPath;
 
-  @Option(names = {"--format", "-f"}, defaultValue = "json", description = "json | jsonl | markdown")
+  @Option(names = {"--format", "-f"}, defaultValue = "json", description = "json | jsonl | markdown | normalized")
   private String format;
 
   @Option(names = {"--output", "-o"}, description = "Output file. Defaults to stdout.")
@@ -68,6 +69,7 @@ public class ScanCommand implements Callable<Integer> {
       case "json" -> new JsonReporter();
       case "jsonl" -> new JsonlReporter();
       case "markdown", "md" -> new MarkdownReporter();
+      case "normalized", "plain", "sql", "text" -> new NormalizedSqlReporter();
       default -> throw new IllegalArgumentException("unsupported format: " + requested);
     };
   }
