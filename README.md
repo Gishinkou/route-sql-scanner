@@ -168,7 +168,7 @@ public record Diagnostic(
     SqlOrigin origin,
     String tableName,
     List<String> expectedRouteFields,
-    String snippet
+    String snippet        // 完整 normalized SQL
 ) {}
 ```
 
@@ -304,12 +304,13 @@ java -jar route-sql-scanner.jar scan \
 
 ```text
 scan
-  --path, -p       文件或目录，可多次
-  --config, -c     YAML/JSON 配置
-  --format, -f     json | jsonl | markdown
-  --output, -o     输出文件；不填则 stdout
+  --path           文件或目录，可多次
+  --config         YAML/JSON 配置
+  --format         json | compact-json | excel | jsonl | markdown | normalized
+  --output         输出文件；不填则 stdout
   --include        glob，可多次
   --exclude        glob，可多次
+  --failed-only    仅输出未通过校验规则的 SQL；支持 json、compact-json、excel 和 normalized
   --fail-on        ERROR | WARN | NEVER
 ```
 
@@ -348,14 +349,14 @@ Markdown：
 - Summary。
 - SQL inventory 表格。
 - Diagnostics 表格。
-- 每条诊断附 SQL snippet。
+- 每条诊断附完整 normalized SQL。
 
 **OpenCode TS tool 适配层**
 V0 只做薄包装，不实现 MCP。
 
 `tools/opencode-sqlscan/src/index.ts`：
 
-- 接收参数：`path/config/format/jarPath`。
+- 接收参数：`path/config/format/jarPath/failedOnly`。
 - 使用 `child_process.spawn` 调用 fat jar。
 - 默认 `--format json`。
 - 返回 stdout JSON。
@@ -369,7 +370,8 @@ export async function scanRouteSql(input: {
   path: string | string[];
   config?: string;
   jarPath?: string;
-  format?: "json" | "jsonl" | "markdown";
+  format?: "json" | "compact-json" | "excel" | "jsonl" | "markdown" | "normalized";
+  failedOnly?: boolean;
 }): Promise<string>;
 ```
 

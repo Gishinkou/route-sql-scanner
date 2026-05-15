@@ -3,3 +3,4 @@ target/
 local-command.md
 tmp/
 tools/opencode-sqlscan/node_modules/
+.DS_Store

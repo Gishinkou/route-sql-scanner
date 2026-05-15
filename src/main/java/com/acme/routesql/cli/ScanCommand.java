@@ -1,14 +1,17 @@
 package com.acme.routesql.cli;
 
+import com.acme.routesql.config.ReportConfig;
 import com.acme.routesql.config.ScannerConfig;
 import com.acme.routesql.core.ScanEngine;
 import com.acme.routesql.model.ScanReport;
+import com.acme.routesql.report.CompactJsonReporter;
+import com.acme.routesql.report.ExcelReporter;
 import com.acme.routesql.report.JsonReporter;
 import com.acme.routesql.report.JsonlReporter;
 import com.acme.routesql.report.MarkdownReporter;
 import com.acme.routesql.report.NormalizedSqlReporter;
+import com.acme.routesql.report.ReportFilters;
 import com.acme.routesql.report.Reporter;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -18,18 +21,21 @@ import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "scan", description = "Scan MyBatis XML and Java JDBC SQL.", mixinStandardHelpOptions = true)
+@Command(name = "scan", description = "Scan MyBatis XML and Java JDBC SQL.")
 public class ScanCommand implements Callable<Integer> {
-  @Option(names = {"--path", "-p"}, required = true, description = "File or directory to scan. Repeatable.")
+  @Option(names = "--help", usageHelp = true, description = "Show this help message and exit.")
+  boolean help;
+
+  @Option(names = "--path", required = true, description = "File or directory to scan. Repeatable.")
   private List<Path> paths = new ArrayList<>();
 
-  @Option(names = {"--config", "-c"}, description = "YAML or JSON scanner config.")
+  @Option(names = "--config", description = "YAML or JSON scanner config.")
   private Path configPath;
 
-  @Option(names = {"--format", "-f"}, defaultValue = "json", description = "json | jsonl | markdown | normalized")
+  @Option(names = "--format", description = "json | compact-json | excel | jsonl | markdown | normalized")
   private String format;
 
-  @Option(names = {"--output", "-o"}, description = "Output file. Defaults to stdout.")
+  @Option(names = "--output", description = "Output file. Defaults to stdout.")
   private Path output;
 
   @Option(names = "--include", description = "Glob include. Repeatable.")
@@ -41,20 +47,26 @@ public class ScanCommand implements Callable<Integer> {
   @Option(names = "--fail-on", defaultValue = "ERROR", description = "ERROR | WARN | NEVER")
   private String failOn;
 
+  @Option(names = "--failed-only", description = "Only output SQL statements that have rule diagnostics.")
+  private boolean failedOnly;
+
   @Override
   public Integer call() {
     try {
       ScannerConfig config = ScannerConfig.load(configPath);
       ScanReport report = new ScanEngine(config).scan(paths, includes, excludes);
-      String rendered = reporter(format).render(report);
+      ReportConfig reportConfig = ReportConfig.discover(configPath, paths);
+      ScanReport outputReport = failedOnly ? ReportFilters.failedSqlOnly(report) : report;
+      Reporter reporter = reporter(reportConfig.effectiveFormat(format));
+      byte[] rendered = reporter.renderBytes(outputReport);
       if (output == null) {
-        System.out.print(rendered);
+        System.out.write(rendered);
       } else {
         Path parent = output.toAbsolutePath().getParent();
         if (parent != null) {
           Files.createDirectories(parent);
         }
-        Files.writeString(output, rendered, StandardCharsets.UTF_8);
+        Files.write(output, rendered);
       }
       return exitCode(report, failOn);
     } catch (Exception e) {
@@ -67,9 +79,11 @@ public class ScanCommand implements Callable<Integer> {
   private Reporter reporter(String requested) {
     return switch (requested.toLowerCase(Locale.ROOT)) {
       case "json" -> new JsonReporter();
+      case "compact-json" -> new CompactJsonReporter();
+      case "excel" -> new ExcelReporter();
       case "jsonl" -> new JsonlReporter();
-      case "markdown", "md" -> new MarkdownReporter();
-      case "normalized", "plain", "sql", "text" -> new NormalizedSqlReporter();
+      case "markdown" -> new MarkdownReporter();
+      case "normalized" -> new NormalizedSqlReporter();
       default -> throw new IllegalArgumentException("unsupported format: " + requested);
     };
   }

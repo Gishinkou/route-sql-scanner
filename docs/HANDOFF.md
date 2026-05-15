@@ -243,13 +243,20 @@ java -jar target/route-sql-scanner-0.1.0.jar scan \
 
 参数位置在 `ScanCommand`：
 
-- `--path, -p`：可重复，文件或目录。
-- `--config, -c`：YAML/JSON。
-- `--format, -f`：`json | jsonl | markdown | normalized`。`normalized` 的别名是 `plain/sql/text`。
-- `--output, -o`：不填则 stdout。
+- `--path`：可重复，文件或目录。
+- `--config`：YAML/JSON。
+- `--format`：`json | compact-json | excel | jsonl | markdown | normalized`。
+- `--output`：不填则 stdout。
 - `--include`：glob，可重复。
 - `--exclude`：glob，可重复。
+- `--failed-only`：输出时只保留未通过校验规则的 SQL；支持 `json`、`compact-json`、`excel` 和 `normalized`。
 - `--fail-on`：`ERROR | WARN | NEVER`。
+
+可在目标项目根目录放 `route-sql-report.yml`，无需 CLI 参数即可控制报告形态：
+
+```yaml
+format: compact-json
+```
 
 退出码：
 

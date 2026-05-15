@@ -47,7 +47,7 @@ public class RouteFieldRule implements SqlRule {
               sql.origin(),
               table,
               tableRule.getRouteFields(),
-              snippet(sql.normalizedSql())
+              sql.normalizedSql()
           ));
         }
       }
@@ -100,13 +100,6 @@ public class RouteFieldRule implements SqlRule {
   private String insertColumnSegment(String sql) {
     Matcher matcher = Pattern.compile("(?i)\\binsert\\s+into\\s+[`\\w.]+\\s*\\(([^)]*)\\)").matcher(sql);
     return matcher.find() ? matcher.group(1) : sql;
-  }
-
-  private String snippet(String sql) {
-    if (sql.length() <= 220) {
-      return sql;
-    }
-    return sql.substring(0, 217) + "...";
   }
 
   private String message(String table, RouteRuleConfig.TableRule tableRule, List<String> missingFields) {

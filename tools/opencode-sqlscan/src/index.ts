@@ -1,12 +1,19 @@
 import { spawn } from "node:child_process";
 
-export type ScanFormat = "json" | "jsonl" | "markdown" | "normalized" | "plain" | "sql" | "text";
+export type ScanFormat =
+  | "json"
+  | "compact-json"
+  | "excel"
+  | "jsonl"
+  | "markdown"
+  | "normalized";
 
 export interface ScanRouteSqlInput {
   path: string | string[];
   config?: string;
   jarPath?: string;
   format?: ScanFormat;
+  failedOnly?: boolean;
   timeoutMs?: number;
 }
 
@@ -20,6 +27,9 @@ export async function scanRouteSql(input: ScanRouteSqlInput): Promise<string> {
   }
   if (input.config) {
     args.push("--config", input.config);
+  }
+  if (input.failedOnly) {
+    args.push("--failed-only");
   }
 
   return new Promise((resolve, reject) => {

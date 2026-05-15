@@ -114,10 +114,10 @@ java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
 
 ```bash
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  -p /path/to/your-java-project \
-  -c /path/to/your-java-project/route-sql.yml \
-  -f json \
-  -o /path/to/your-java-project/route-sql-report.json \
+  --path /path/to/your-java-project \
+  --config /path/to/your-java-project/route-sql.yml \
+  --format json \
+  --output /path/to/your-java-project/route-sql-report.json \
   --fail-on NEVER
 ```
 
@@ -125,10 +125,10 @@ java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
 
 ```bash
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  -p /path/to/your-java-project \
-  -c /path/to/your-java-project/route-sql.yml \
-  -f markdown \
-  -o /path/to/your-java-project/route-sql-report.md \
+  --path /path/to/your-java-project \
+  --config /path/to/your-java-project/route-sql.yml \
+  --format markdown \
+  --output /path/to/your-java-project/route-sql-report.md \
   --fail-on NEVER
 ```
 
@@ -136,10 +136,10 @@ java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
 
 ```bash
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  -p /path/to/your-java-project \
-  -c /path/to/your-java-project/route-sql.yml \
-  -f jsonl \
-  -o /path/to/your-java-project/route-sql-report.jsonl \
+  --path /path/to/your-java-project \
+  --config /path/to/your-java-project/route-sql.yml \
+  --format jsonl \
+  --output /path/to/your-java-project/route-sql-report.jsonl \
   --fail-on NEVER
 ```
 
@@ -147,22 +147,55 @@ java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
 
 ```bash
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  -p /path/to/your-java-project \
-  -c /path/to/your-java-project/route-sql.yml \
-  -f normalized \
-  -o /path/to/your-java-project/route-sql-normalized.txt \
+  --path /path/to/your-java-project \
+  --config /path/to/your-java-project/route-sql.yml \
+  --format normalized \
+  --output /path/to/your-java-project/route-sql-normalized.txt \
   --fail-on NEVER
 ```
 
-`normalized` 只输出 `sqlObjects[].normalizedSql`，不包含 summary、诊断、来源位置等元数据。也可以使用别名：`plain`、`sql`、`text`。
+`normalized` 只输出 `sqlObjects[].normalizedSql`，不包含 summary、诊断、来源位置等元数据。
+
+精简诊断 JSON 用 `--format compact-json`，输出以 diagnostics 为主视角：每条诊断直接带上对应 SQL 的 `identity.sourceKey`、`identity.logicalName`、`normalizedSql`、`severity`、`message`、`tableName`、`expectedRouteFields`、`columns`。
+
+Excel 输出用 `--format excel`，字段和 `compact-json` 完全一致，一条诊断一行：
+
+```bash
+java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
+  --path /path/to/your-java-project \
+  --config /path/to/your-java-project/route-sql.yml \
+  --format excel \
+  --output /path/to/your-java-project/route-sql-diagnostics.xlsx \
+  --failed-only \
+  --fail-on NEVER
+```
+
+如果不想在构建命令里传 `--format`，可以在目标项目根目录放 `route-sql-report.yml`：
+
+```yaml
+format: compact-json
+```
+
+这个文件只控制报告输出形态，不控制扫描规则。扫描规则仍然放在 `route-sql.yml` 或 `--config` 指向的配置文件里。
+
+只输出未通过校验规则的 SQL 时，加 `--failed-only`。该选项支持 `json`、`compact-json`、`excel` 和 `normalized` 输出；`json` 会保留报告结构，但只包含有诊断的 `sqlObjects` 以及对应 diagnostics：
+
+```bash
+java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
+  --path /path/to/your-java-project \
+  --config /path/to/your-java-project/route-sql.yml \
+  --format compact-json \
+  --failed-only \
+  --fail-on NEVER
+```
 
 不指定 `--output` 时，报告会输出到 stdout：
 
 ```bash
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  -p /path/to/your-java-project \
-  -c /path/to/your-java-project/route-sql.yml \
-  -f json \
+  --path /path/to/your-java-project \
+  --config /path/to/your-java-project/route-sql.yml \
+  --format json \
   --fail-on NEVER
 ```
 
@@ -172,11 +205,11 @@ java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
 
 ```bash
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  -p /path/to/your-java-project/src/main/resources/mapper \
-  -p /path/to/your-java-project/src/main/java \
-  -c /path/to/your-java-project/route-sql.yml \
-  -f json \
-  -o /path/to/your-java-project/route-sql-report.json \
+  --path /path/to/your-java-project/src/main/resources/mapper \
+  --path /path/to/your-java-project/src/main/java \
+  --config /path/to/your-java-project/route-sql.yml \
+  --format json \
+  --output /path/to/your-java-project/route-sql-report.json \
   --fail-on NEVER
 ```
 
@@ -184,14 +217,14 @@ java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
 
 ```bash
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  -p /path/to/your-java-project \
+  --path /path/to/your-java-project \
   --include "**/*.xml" \
   --include "**/*.java" \
   --exclude "**/target/**" \
   --exclude "**/build/**" \
-  -c /path/to/your-java-project/route-sql.yml \
-  -f markdown \
-  -o /path/to/your-java-project/route-sql-report.md \
+  --config /path/to/your-java-project/route-sql.yml \
+  --format markdown \
+  --output /path/to/your-java-project/route-sql-report.md \
   --fail-on NEVER
 ```
 
@@ -238,6 +271,8 @@ JSON 顶层大致是：
   "snippet": "SELECT id, status FROM orders WHERE id = ?"
 }
 ```
+
+`snippet` 字段当前保存完整 normalized SQL，不再做长度截断。
 
 如果使用轻量 JSON 的 `requiredColumns` 且缺少其中一部分字段，诊断消息会指出实际缺少哪些必要列：
 
