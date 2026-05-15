@@ -352,27 +352,26 @@ Markdown：
 - 每条诊断附完整 normalized SQL。
 
 **OpenCode TS tool 适配层**
-V0 只做薄包装，不实现 MCP。
+V0 只做本地扫描包装，不实现 MCP。面向 AI agent 的 skill 语义见 `docs/AGENT_SKILL.md`。
 
 `tools/opencode-sqlscan/src/index.ts`：
 
-- 接收参数：`path/config/format/jarPath/failedOnly`。
-- 使用 `child_process.spawn` 调用 fat jar。
-- 默认 `--format json`。
-- 返回 stdout JSON。
-- stderr 作为 tool warning。
-- 超时默认 60s，可配置。
+- `scanRouteSqlSkill` 是推荐给 agent 的最小接口，只接收 `projectPath/configPath/outputPath?`。
+- skill 默认输出 `.xlsx`，底层固定使用 `--format excel --failed-only --fail-on NEVER`。
+- 不向 agent 暴露 `format/include/exclude/fail-on/jarPath` 等底层调试参数。
+- `scanRouteSql` 保留为高级薄包装，用于调试、回归测试或内部工具链。
 
-伪接口：
+skill 接口：
 
 ```ts
-export async function scanRouteSql(input: {
-  path: string | string[];
-  config?: string;
-  jarPath?: string;
-  format?: "json" | "compact-json" | "excel" | "jsonl" | "markdown" | "normalized";
-  failedOnly?: boolean;
-}): Promise<string>;
+export async function scanRouteSqlSkill(input: {
+  projectPath: string;
+  configPath: string;
+  outputPath?: string;
+}): Promise<{
+  outputPath: string;
+  format: "xlsx";
+}>;
 ```
 
 **验收标准**

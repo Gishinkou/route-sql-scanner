@@ -204,7 +204,7 @@ Java JDBC：
 OpenCode wrapper：
 
 - `tools/opencode-sqlscan/src/index.ts`
-  薄包装，使用 `child_process.spawn` 调 `java -jar ... scan`。
+  薄包装，使用 `child_process.spawn` 调 `java -jar ... scan`。`scanRouteSqlSkill` 是面向 AI agent 的最小接口，默认输出 `.xlsx`；`scanRouteSql` 保留为高级调试接口。
 
 测试与 fixtures：
 
@@ -230,6 +230,8 @@ OpenCode wrapper：
 任何改动只要影响 `normalizedSql`、origin 位置或 logicalName，都可能改变 stable id。改模型或归一化逻辑时要同步调整测试预期。
 
 ## 7. CLI 行为
+
+AI agent skill 调用不要直接暴露全部 CLI 参数，使用 `docs/AGENT_SKILL.md` 中定义的最小接口：`projectPath/configPath/outputPath?`。skill 默认固定 `--format excel --failed-only --fail-on NEVER`，报告文件为 `.xlsx`。
 
 命令形态：
 

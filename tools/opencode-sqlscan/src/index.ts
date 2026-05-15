@@ -13,8 +13,32 @@ export interface ScanRouteSqlInput {
   config?: string;
   jarPath?: string;
   format?: ScanFormat;
+  output?: string;
   failedOnly?: boolean;
   timeoutMs?: number;
+}
+
+export interface ScanRouteSqlSkillInput {
+  projectPath: string;
+  configPath: string;
+  outputPath?: string;
+}
+
+export interface ScanRouteSqlSkillResult {
+  outputPath: string;
+  format: "xlsx";
+}
+
+export async function scanRouteSqlSkill(input: ScanRouteSqlSkillInput): Promise<ScanRouteSqlSkillResult> {
+  const outputPath = input.outputPath ?? `${input.projectPath.replace(/[\\/]+$/, "")}/route-sql-diagnostics.xlsx`;
+  await scanRouteSql({
+    path: input.projectPath,
+    config: input.configPath,
+    format: "excel",
+    output: outputPath,
+    failedOnly: true
+  });
+  return { outputPath, format: "xlsx" };
 }
 
 export async function scanRouteSql(input: ScanRouteSqlInput): Promise<string> {
@@ -27,6 +51,9 @@ export async function scanRouteSql(input: ScanRouteSqlInput): Promise<string> {
   }
   if (input.config) {
     args.push("--config", input.config);
+  }
+  if (input.output) {
+    args.push("--output", input.output);
   }
   if (input.failedOnly) {
     args.push("--failed-only");

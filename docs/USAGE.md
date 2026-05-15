@@ -2,6 +2,8 @@
 
 这份文档面向“我要快速在另一个 Java 项目里跑一下工具，并拿到一份输出”的场景。
 
+如果是 IDEA 插件里的 AI agent 调用，不建议直接暴露本页所有 CLI 参数；请使用面向 skill 的最小接口文档：[AGENT_SKILL.md](AGENT_SKILL.md)。该接口默认输出 `.xlsx`，并隐藏底层格式、glob、退出码等调试选项。
+
 ## 1. 准备工具 jar
 
 在 `route-sql-scanner` 项目根目录执行：
