@@ -45,8 +45,8 @@ java -jar target/route-sql-scanner-0.1.0.jar scan \
 当前 fixture 预期：
 
 - 扫描文件数：6
-- SQL/fragment 数：10
-- 诊断数：3
+- SQL/fragment 数：14
+- 诊断数：6
 - fat jar 路径：`target/route-sql-scanner-0.1.0.jar`
 
 注意：第一次 Maven 运行可能需要写 `~/.m2` 下载依赖或插件。如果在沙箱里失败，需要申请提升权限后重跑同一 Maven 命令。
@@ -134,7 +134,7 @@ MyBatis XML：
 
 - `src/main/java/com/acme/routesql/extract/mybatis/MyBatisXmlExtractor.java`
   使用 DOM 解析 XML，不依赖 MyBatis runtime。
-  当前支持 `<select>/<insert>/<update>/<delete>/<sql>`、`<include>`、常见动态标签近似展开、`#{}` 转 `?`、`${}` 转 `__DYNAMIC__`。
+  当前支持 `<select>/<insert>/<update>/<delete>/<sql>`、`<include>`、常见动态标签枚举展开、`#{}` 转 `?`、`${}` 转 `__DYNAMIC__`。
   `SqlOrigin` 会保留 namespace、statementId、statementType、file、line、column。
 
 MyBatis 注解：
@@ -142,10 +142,10 @@ MyBatis 注解：
 - `src/main/java/com/acme/routesql/extract/mybatis/MyBatisAnnotationExtractor.java`
   使用 JavaParser 读取 mapper 方法上的 `@Select/@Insert/@Update/@Delete`。
   支持单字符串、字符串数组、字符串拼接、text block。
-  注解内 `<script>/<where>/<if>` 等动态标签复用 `MyBatisSqlScriptBuilder` 近似展开。
+  注解内 `<script>/<where>/<if>` 等动态标签复用 `MyBatisSqlScriptBuilder` 枚举展开。
   暂不支持 `@SelectProvider/@InsertProvider/@UpdateProvider/@DeleteProvider`。
 - `src/main/java/com/acme/routesql/extract/mybatis/MyBatisSqlScriptBuilder.java`
-  XML mapper 和注解 mapper 共用的 MyBatis 动态 SQL 近似重建逻辑。
+  XML mapper 和注解 mapper 共用的 MyBatis 动态 SQL 变体重建逻辑。`<if>` 会产出包含/省略两种分支，父节点做组合；`<choose>` 会枚举 `when/otherwise` 分支。
 
 Java JDBC：
 
@@ -287,9 +287,10 @@ format: compact-json
 增强 MyBatis 动态 SQL：
 
 1. 主要改 `MyBatisSqlScriptBuilder`。
-2. 保持 raw SQL 近似可解析。
-3. 遇到运行时不确定内容时标记 `dynamic=true`。
-4. 保持 namespace、statementId、line、column 不丢。
+2. 现在的目标不是“带上所有字段”，而是枚举可能变体；例如两个 `<if>` 会生成 4 条 SQL。
+3. 保持每个 raw SQL 变体近似可解析，并在 extractor 层按 normalized SQL 去重。
+4. 枚举出的变体仍标记 `dynamic=true`，并在 attributes 中带 `variantIndex/variantCount`。
+5. 保持 namespace、statementId、line、column 不丢；同一 statement 的多个变体共享 logicalName，但 stable id 会因 contentHash 不同而不同。
 
 新增输入 JSON 适配：
 
@@ -326,9 +327,8 @@ format: compact-json
 
 ## 9. 当前 V0 简化点和风险
 
-- MyBatis 动态 SQL 是近似重建，不模拟所有运行时分支。
+- MyBatis 动态 SQL 会枚举 `<if>` 包含/省略分支和 `<choose>` 分支，但仍是静态近似，不执行 OGNL，也不模拟所有 MyBatis runtime 行为。
 - MyBatis 注解 mapper 当前只提取 `@Select/@Insert/@Update/@Delete`，不提取 provider 注解。
-- `<choose>` 当前把分支文本合并，可能出现不真实但有利于静态诊断的 SQL。
 - `<foreach>` 当前输出 `(__FOREACH__)` 并标记 dynamic。
 - Java 只做同方法内简单字符串求值，不做完整符号解析。
 - Java 对 `jdbcTemplate.query/update` 做 JDBC-like 支持，但没有验证接收者类型。

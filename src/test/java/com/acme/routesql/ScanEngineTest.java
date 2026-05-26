@@ -32,21 +32,34 @@ class ScanEngineTest {
 
     ScanReport report = new ScanEngine(config).scan(List.of(fixtureDir), List.of(), List.of());
 
-    assertEquals(10, report.summary().sqlCount());
+    assertEquals(14, report.summary().sqlCount());
     assertTrue(report.sqlObjects().stream()
         .anyMatch(sql -> "com.acme.OrderMapper.findOrders".equals(sql.identity().logicalName())));
+    List<String> findOrdersVariants = report.sqlObjects().stream()
+        .filter(sql -> "com.acme.OrderMapper.findOrders".equals(sql.identity().logicalName()))
+        .map(sql -> sql.normalizedSql())
+        .toList();
+    assertEquals(4, findOrdersVariants.size());
+    assertTrue(findOrdersVariants.contains("SELECT id, tenant_id, order_id, status FROM orders"));
+    assertTrue(findOrdersVariants.contains("SELECT id, tenant_id, order_id, status FROM orders WHERE status = ?"));
+    assertTrue(findOrdersVariants.contains("SELECT id, tenant_id, order_id, status FROM orders WHERE tenant_id = ?"));
+    assertTrue(findOrdersVariants.contains(
+        "SELECT id, tenant_id, order_id, status FROM orders WHERE status = ? AND tenant_id = ?"));
     assertTrue(report.sqlObjects().stream().anyMatch(sql -> sql.origin().kind().name().equals("JAVA_JDBC")));
     assertTrue(report.sqlObjects().stream()
         .anyMatch(sql -> "fixtures.AnnotationOrderMapper.findDynamic".equals(sql.identity().logicalName())
             && sql.origin().kind().name().equals("MYBATIS_ANNOTATION")
             && sql.dynamic()));
+    assertEquals(2, report.sqlObjects().stream()
+        .filter(sql -> "fixtures.AnnotationOrderMapper.findDynamic".equals(sql.identity().logicalName()))
+        .count());
     assertTrue(report.sqlObjects().stream().allMatch(sql -> sql.identity().stableId().length() == 64));
     assertTrue(report.sqlObjects().stream()
         .anyMatch(sql -> sql.parse().tables().contains("orders")));
     assertFalse(report.diagnostics().isEmpty());
     assertTrue(report.diagnostics().stream()
         .anyMatch(diagnostic -> diagnostic.snippet().contains("WHERE id = ?")));
-    assertEquals(3, report.summary().diagnosticCount());
+    assertEquals(6, report.summary().diagnosticCount());
   }
 
   @Test
@@ -60,6 +73,9 @@ class ScanEngineTest {
     assertTrue(new MarkdownReporter().render(report).contains("Route SQL Scan Report"));
     String normalizedSqlLines = new NormalizedSqlReporter().render(report);
     assertTrue(normalizedSqlLines.contains("SELECT id, tenant_id, order_id FROM orders WHERE tenant_id = ?"));
+    assertTrue(normalizedSqlLines.contains("SELECT id, tenant_id, order_id, status FROM orders"));
+    assertTrue(normalizedSqlLines.contains(
+        "SELECT id, tenant_id, order_id, status FROM orders WHERE status = ? AND tenant_id = ?"));
     assertEquals(report.summary().sqlCount(), normalizedSqlLines.lines().count());
   }
 
@@ -71,8 +87,8 @@ class ScanEngineTest {
 
     ScanReport failedOnly = ReportFilters.failedSqlOnly(report);
 
-    assertEquals(3, failedOnly.summary().sqlCount());
-    assertEquals(3, failedOnly.summary().diagnosticCount());
+    assertEquals(6, failedOnly.summary().sqlCount());
+    assertEquals(6, failedOnly.summary().diagnosticCount());
     assertTrue(failedOnly.sqlObjects().stream()
         .allMatch(sql -> failedOnly.diagnostics().stream()
             .anyMatch(diagnostic -> diagnostic.sqlStableId().equals(sql.identity().stableId()))));
@@ -83,9 +99,9 @@ class ScanEngineTest {
     assertFalse(normalizedSqlLines.contains("WHERE tenant_id = ?"));
 
     JsonNode json = new ObjectMapper().readTree(new JsonReporter().render(failedOnly));
-    assertEquals(3, json.get("sqlObjects").size());
-    assertEquals(3, json.get("summary").get("sqlCount").asInt());
-    assertEquals(3, json.get("diagnostics").size());
+    assertEquals(6, json.get("sqlObjects").size());
+    assertEquals(6, json.get("summary").get("sqlCount").asInt());
+    assertEquals(6, json.get("diagnostics").size());
   }
 
   @Test
@@ -97,7 +113,7 @@ class ScanEngineTest {
     JsonNode json = new ObjectMapper().readTree(new CompactJsonReporter().render(report));
     JsonNode diagnostic = json.get("diagnostics").get(0);
 
-    assertEquals(3, json.get("diagnostics").size());
+    assertEquals(6, json.get("diagnostics").size());
     assertTrue(diagnostic.has("identity"));
     assertTrue(diagnostic.get("identity").has("sourceKey"));
     assertTrue(diagnostic.get("identity").has("logicalName"));
@@ -166,8 +182,8 @@ class ScanEngineTest {
     ScanReport report = new ScanEngine(config)
         .scan(List.of(fixtureDir.resolve("AnnotationOrderMapper.java")), List.of(), List.of());
 
-    assertEquals(3, report.summary().sqlCount());
-    assertEquals(3, report.summary().diagnosticCount());
+    assertEquals(4, report.summary().sqlCount());
+    assertEquals(4, report.summary().diagnosticCount());
     assertTrue(report.diagnostics().stream()
         .anyMatch(diagnostic -> diagnostic.origin().statementId().equals("findByTenant")
             && diagnostic.message().contains("order_id")));

@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -63,10 +64,10 @@ public class MyBatisXmlExtractor implements SqlExtractor {
         continue;
       }
       String statementId = statement.getAttribute("id");
-      MyBatisSqlScriptBuilder.BuildResult built = MyBatisSqlScriptBuilder.buildChildren(statement, fragments);
-      String raw = context.normalizer().normalizeMyBatisParameters(built.sql());
-      boolean dynamic = built.dynamic() || raw.contains("__DYNAMIC__");
-      String normalized = context.normalizer().normalize(raw);
+      List<SqlVariant> variants = sqlVariants(
+          MyBatisSqlScriptBuilder.buildChildrenVariants(statement, fragments),
+          context
+      );
       LineColumn location = locate(xml, tagName, statementId);
       SqlOrigin origin = new SqlOrigin(
           SourceKind.MYBATIS_XML,
@@ -79,16 +80,48 @@ public class MyBatisXmlExtractor implements SqlExtractor {
           null,
           null
       );
-      objects.add(SqlObjects.create(
-          raw,
-          normalized,
-          origin,
-          dynamic,
-          dynamic ? List.of("mybatis", "dynamic") : List.of("mybatis"),
-          Map.of("extractor", name())
-      ));
+      for (int i = 0; i < variants.size(); i++) {
+        SqlVariant variant = variants.get(i);
+        objects.add(SqlObjects.create(
+            variant.raw(),
+            variant.normalized(),
+            origin,
+            variant.dynamic(),
+            variant.dynamic() ? List.of("mybatis", "dynamic") : List.of("mybatis"),
+            attributes(i, variants.size())
+        ));
+      }
     }
     return objects;
+  }
+
+  private List<SqlVariant> sqlVariants(
+      List<MyBatisSqlScriptBuilder.BuildResult> buildResults,
+      ExtractionContext context
+  ) {
+    Map<String, SqlVariant> variants = new LinkedHashMap<>();
+    for (MyBatisSqlScriptBuilder.BuildResult built : buildResults) {
+      String raw = context.normalizer().normalizeMyBatisParameters(built.sql());
+      boolean dynamic = built.dynamic() || raw.contains("__DYNAMIC__");
+      String normalized = context.normalizer().normalize(raw);
+      SqlVariant existing = variants.get(normalized);
+      if (existing == null) {
+        variants.put(normalized, new SqlVariant(raw, normalized, dynamic));
+      } else if (!existing.dynamic() && dynamic) {
+        variants.put(normalized, new SqlVariant(existing.raw(), existing.normalized(), true));
+      }
+    }
+    return new ArrayList<>(variants.values());
+  }
+
+  private Map<String, Object> attributes(int variantIndex, int variantCount) {
+    Map<String, Object> attributes = new LinkedHashMap<>();
+    attributes.put("extractor", name());
+    if (variantCount > 1) {
+      attributes.put("variantIndex", variantIndex + 1);
+      attributes.put("variantCount", variantCount);
+    }
+    return attributes;
   }
 
   private Map<String, Element> collectFragments(Element mapper, String namespace) {
@@ -125,4 +158,6 @@ public class MyBatisXmlExtractor implements SqlExtractor {
   }
 
   private record LineColumn(int line, int column) {}
+
+  private record SqlVariant(String raw, String normalized, boolean dynamic) {}
 }

@@ -17,6 +17,7 @@ abstract: 通过 DongDalMCP 配置和内置 route-sql-scanner 生成 SQL 路由�
 - 将配置保存到本地临时文件。
 - 调用插件随 skills 同步的 `dongdal/tools/opencode-sqlscan` wrapper 和 `route-sql-scanner-0.1.0.jar`。
 - 输出 `.xlsx` 报告路径和失败项摘要。
+- MyBatis XML/注解中的动态 SQL 会按静态可见分支枚举；例如 `<if>` 会展开为包含/省略两种候选 SQL，所以同一个 mapper statement 可能产生多条诊断候选。
 
 不做：
 
@@ -96,6 +97,8 @@ MCP 返回或 Agent 生成的 JSON 应符合 scanner 支持的轻量规则：
 - 配置文件：本地路径
 - 报告文件：`.xlsx` 绝对路径
 - 摘要：报告只包含未通过分库分表字段完整性校验的 SQL；如 wrapper 输出了 stdout/stderr，摘取核心失败项或异常。
+
+注意：动态 SQL 分支枚举后，同一个 mapper statement 可能在报告中出现多行。每行代表一个可能的 SQL 变体，而不是重复扫描。
 
 若扫描器异常退出：
 
