@@ -5,8 +5,8 @@ import com.acme.routesql.extract.SqlExtractor;
 import com.acme.routesql.model.SourceKind;
 import com.acme.routesql.model.SqlObject;
 import com.acme.routesql.model.SqlOrigin;
+import com.acme.routesql.util.JavaSourceParser;
 import com.acme.routesql.util.SqlObjects;
-import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
@@ -22,10 +22,8 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -44,7 +42,7 @@ public class MyBatisAnnotationExtractor implements SqlExtractor {
 
   @Override
   public List<SqlObject> extract(Path path, ExtractionContext context) throws Exception {
-    CompilationUnit unit = StaticJavaParser.parse(path);
+    CompilationUnit unit = JavaSourceParser.parse(path);
     String namespace = fullyQualifiedPrimaryType(unit, path);
     List<SqlObject> objects = new ArrayList<>();
 
@@ -59,10 +57,10 @@ public class MyBatisAnnotationExtractor implements SqlExtractor {
           continue;
         }
 
-        List<SqlVariant> variants = sqlVariants(
-            MyBatisSqlScriptBuilder.buildAnnotationScripts(sqlValue.get()),
-            context
-        );
+        MyBatisSqlScriptBuilder.BuildResult built =
+            MyBatisSqlScriptBuilder.buildAnnotationScript(sqlValue.get());
+        String raw = context.normalizer().normalizeMyBatisParameters(built.sql());
+        boolean dynamic = built.dynamic() || raw.contains("__DYNAMIC__");
         int line = annotation.getBegin().map(p -> p.line).orElse(method.getBegin().map(p -> p.line).orElse(1));
         int column = annotation.getBegin().map(p -> p.column).orElse(method.getBegin().map(p -> p.column).orElse(1));
         SqlOrigin origin = new SqlOrigin(
@@ -76,50 +74,10 @@ public class MyBatisAnnotationExtractor implements SqlExtractor {
             namespace,
             method.getNameAsString()
         );
-        for (int i = 0; i < variants.size(); i++) {
-          SqlVariant variant = variants.get(i);
-          objects.add(SqlObjects.create(
-              variant.raw(),
-              variant.normalized(),
-              origin,
-              variant.dynamic(),
-              variant.dynamic() ? List.of("mybatis", "annotation", "dynamic") : List.of("mybatis", "annotation"),
-              attributes(annotation, i, variants.size())
-          ));
-        }
+        objects.add(SqlObjects.create(raw, origin, dynamic));
       }
     }
     return objects;
-  }
-
-  private List<SqlVariant> sqlVariants(
-      List<MyBatisSqlScriptBuilder.BuildResult> buildResults,
-      ExtractionContext context
-  ) {
-    Map<String, SqlVariant> variants = new LinkedHashMap<>();
-    for (MyBatisSqlScriptBuilder.BuildResult built : buildResults) {
-      String raw = context.normalizer().normalizeMyBatisParameters(built.sql());
-      boolean dynamic = built.dynamic() || raw.contains("__DYNAMIC__");
-      String normalized = context.normalizer().normalize(raw);
-      SqlVariant existing = variants.get(normalized);
-      if (existing == null) {
-        variants.put(normalized, new SqlVariant(raw, normalized, dynamic));
-      } else if (!existing.dynamic() && dynamic) {
-        variants.put(normalized, new SqlVariant(existing.raw(), existing.normalized(), true));
-      }
-    }
-    return new ArrayList<>(variants.values());
-  }
-
-  private Map<String, Object> attributes(AnnotationExpr annotation, int variantIndex, int variantCount) {
-    Map<String, Object> attributes = new LinkedHashMap<>();
-    attributes.put("extractor", name());
-    attributes.put("annotation", annotation.getNameAsString());
-    if (variantCount > 1) {
-      attributes.put("variantIndex", variantIndex + 1);
-      attributes.put("variantCount", variantCount);
-    }
-    return attributes;
   }
 
   private String statementType(AnnotationExpr annotation) {
@@ -191,6 +149,4 @@ public class MyBatisAnnotationExtractor implements SqlExtractor {
     int dot = name.lastIndexOf('.');
     return dot >= 0 ? name.substring(dot + 1) : name;
   }
-
-  private record SqlVariant(String raw, String normalized, boolean dynamic) {}
 }

@@ -1,6 +1,18 @@
 # 精简 route-sql-scanner 客户端 + 服务端联动方案（迭代计划）
 
-面向 coding agent 编程；目标是把客户端退化为“纯 SQL 清单生产者”，所有诊断逻辑收敛到服务端，并把客户端→服务端的传输负载和字段数量降到最小可用集。
+> **状态（2026-06-01）：已落地。** 双端 v2 迭代已实施，本文保留作设计原稿。
+> 当前实际行为以以下文档为准：
+> - 服务端契约：[`sql-remote-analysis-api.md`](./sql-remote-analysis-api.md)
+> - 输入 & 诊断分层：[`sql-analyze-input-and-diagnostics.md`](./sql-analyze-input-and-diagnostics.md)
+> - 客户端 skill 修改指南：[`agent-skill-compact-sql-modification-guide.md`](./agent-skill-compact-sql-modification-guide.md)
+>
+> 与原计划相比的实际差异：
+> - 服务端**未保留过渡期**，直接只支持 compact-json v=2，旧 4 种格式分支与 `InventoryMarkdownParser`
+    >   一并删除；非 compact-json 系列别名直接 `400 UNSUPPORTED_FORMAT`。
+> - `dynamic=true` 时 SDK 兼容性校验被跳过（写一行 `errorType=DynamicSqlSkipped`，不计入
+    >   `compatibilityFailureCount`），与 §6 风险表的兜底策略一致。
+
+面向 coding agent 编程；目标是把客户端退化为”纯 SQL 清单生产者”，所有诊断逻辑收敛到服务端，并把客户端→服务端的传输负载和字段数量降到最小可用集。
 
 参考：
 - 客户端现状：`ref/route-sql-scanner-src/`（待修改副本，本仓库通过 skill 拉取后编译）

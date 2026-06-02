@@ -1,8 +1,8 @@
 # route-sql-scanner 使用文档
 
-这份文档面向“我要快速在另一个 Java 项目里跑一下工具，并拿到一份输出”的场景。
+这份文档面向"我要在另一个 Java 项目里跑一下工具，拿到一份 SQL 清单"的场景。
 
-如果是 IDEA 插件里的 AI agent 调用，不建议直接暴露本页所有 CLI 参数；请使用面向 skill 的最小接口文档：[AGENT_SKILL.md](AGENT_SKILL.md)。该接口默认输出 `.xlsx`，并隐藏底层格式、glob、退出码等调试选项。
+当前版本职责被收敛为：**纯 SQL 清单生产者**。不再做规则诊断、不再产出 xlsx/markdown/normalized 等格式，唯一输出是 `compact-json`（v=2）。诊断逻辑在服务端完成。
 
 ## 1. 准备工具 jar
 
@@ -30,176 +30,98 @@ java -jar target/route-sql-scanner-0.1.0.jar scan --help
 - 本机有 Java 17 或更高版本。
 - 首次 `mvn package` 需要能下载 Maven 依赖。
 
-## 2. 在目标 Java 项目里准备规则配置
+## 2. 可选：准备一个配置文件
 
-在你要扫描的 Java 项目根目录创建一个配置文件，比如 `route-sql.yml`：
+配置目前只剩一个可选字段，用于在输出里标记项目名：
 
 ```yaml
-dialect: mysql
-routeRules:
-  defaultSeverity: ERROR
-  tables:
-    orders:
-      routeFields: [tenant_id, order_id]
-      operations: [SELECT, UPDATE, DELETE, INSERT]
-    order_item:
-      routeFields: [tenant_id, order_id]
-      operations: [SELECT, UPDATE, DELETE, INSERT]
+project: my-service
 ```
 
-按你的业务表修改：
-
-- `orders`、`order_item`：需要检查的表名。
-- `routeFields`：这些表允许使用的路由字段。SQL 中出现任意一个即视为满足 V0 规则。
-- `operations`：要检查的 SQL 类型。
-- `defaultSeverity`：诊断级别，通常用 `ERROR`。
-
-如果只是想先提取 SQL，不关心诊断，可以不传 `--config`，工具会使用默认空规则。
-
-也可以使用更轻量的 JSON 格式表达“指定表名和必要列名”。这种格式会经过内置预处理 hook 转换成内部规则模型：
+也支持 JSON：
 
 ```json
-{
-  "dialect": "mysql",
-  "defaultSeverity": "ERROR",
-  "tables": [
-    {
-      "name": "orders",
-      "requiredColumns": ["tenant_id", "order_id"],
-      "operations": ["SELECT", "UPDATE", "DELETE"]
-    },
-    {
-      "name": "order_item",
-      "requiredColumns": ["tenant_id", "order_id"]
-    }
-  ]
-}
+{ "project": "my-service" }
 ```
 
-轻量 JSON 语义：
+不传 `--config` 时，输出里不会包含 `project` 字段。扫描器不再读取任何路由规则、dialect、severity 等配置；这些已经全部移到服务端。
 
-- `name`：表名，也兼容 `table`、`tableName`。
-- `requiredColumns`：WHERE 中必须出现的路由列，也兼容 `columns`、`routeColumns`、`routeFields`。
-- `operations`：默认是 `SELECT/UPDATE/DELETE`。
-- `requireAll`：默认是 `true`，表示必要列必须全部出现。设为 `false` 时，出现任意一个路由列即可。
-
-旧的 `routeRules.tables.*.routeFields` 配置默认仍是“任意一个命中即可”，不会被这个新格式改变语义。
-
-## 3. 扫描另一个 Java 项目
+## 3. 扫描目标 Java 项目
 
 假设：
 
 - 工具项目路径：`/path/to/route-sql-scanner`
 - 目标 Java 项目路径：`/path/to/your-java-project`
-- 目标项目配置：`/path/to/your-java-project/route-sql.yml`
+- 输出位置：`/path/to/your-java-project/route-sql-inventory.json`
 
-在任意目录执行：
+执行：
+
+```bash
+java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
+  --path /path/to/your-java-project \
+  --output /path/to/your-java-project/route-sql-inventory.json
+```
+
+带 project 名：
 
 ```bash
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
   --path /path/to/your-java-project \
   --config /path/to/your-java-project/route-sql.yml \
-  --format json \
-  --output /path/to/your-java-project/route-sql-report.json \
-  --fail-on NEVER
+  --output /path/to/your-java-project/route-sql-inventory.json
 ```
 
-执行完成后，查看输出文件：
-
-```text
-/path/to/your-java-project/route-sql-report.json
-```
-
-## 4. 常用输出格式
-
-输出 JSON，适合后续脚本处理：
+不指定 `--output` 时，结果会写到 stdout：
 
 ```bash
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  --path /path/to/your-java-project \
-  --config /path/to/your-java-project/route-sql.yml \
-  --format json \
-  --output /path/to/your-java-project/route-sql-report.json \
-  --fail-on NEVER
+  --path /path/to/your-java-project
 ```
 
-输出 Markdown，适合人工阅读：
+## 4. 输出格式：compact-json (v=2)
 
-```bash
-java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  --path /path/to/your-java-project \
-  --config /path/to/your-java-project/route-sql.yml \
-  --format markdown \
-  --output /path/to/your-java-project/route-sql-report.md \
-  --fail-on NEVER
+顶层结构：
+
+```json
+{
+  "v": 2,
+  "project": "my-service",
+  "scannedAt": "2026-06-01T12:34:56",
+  "sqls": [
+    {
+      "at": "com.example.OrderMapper#selectById(OrderMapper.java:42)",
+      "sql": "select * from order_main where order_id = #{orderId}"
+    },
+    {
+      "at": "com.example.OrderMapper.selectByStatus(OrderMapper.xml:88)",
+      "sql": "select * from order_main where status = #{status}",
+      "dynamic": true
+    }
+  ]
+}
 ```
 
-输出 JSONL，适合流式消费：
+字段语义（严格）：
 
-```bash
-java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  --path /path/to/your-java-project \
-  --config /path/to/your-java-project/route-sql.yml \
-  --format jsonl \
-  --output /path/to/your-java-project/route-sql-report.jsonl \
-  --fail-on NEVER
-```
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `v` | int | 是 | inventory schema 版本，恒为 `2` |
+| `project` | string | 否 | 项目名，仅展示用；由 `--config` 中的 `project` 字段填充 |
+| `scannedAt` | string | 是 | 扫描时间，ISO 本地时间字符串 |
+| `sqls` | array | 是 | SQL 清单 |
+| `sqls[].at` | string | 是 | IDEA "Copy Reference" 风格的单字段出处定位 |
+| `sqls[].sql` | string | 是 | raw SQL，保留 MyBatis 占位符与动态片段；服务端再做规范化 |
+| `sqls[].dynamic` | bool | 否 | 是否动态 SQL；缺省 `false` |
 
-输出 normalized SQL，一行一条，适合密集查看、grep 或 diff：
+`at` 字段格式按来源类型固定为：
 
-```bash
-java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  --path /path/to/your-java-project \
-  --config /path/to/your-java-project/route-sql.yml \
-  --format normalized \
-  --output /path/to/your-java-project/route-sql-normalized.txt \
-  --fail-on NEVER
-```
+| 来源 | 格式 | 例 |
+| --- | --- | --- |
+| MyBatis XML | `<namespace>.<statementId>(<file>:<line>)` | `com.example.OrderMapper.selectById(OrderMapper.xml:42)` |
+| MyBatis 注解 | `<className>#<methodName>(<file>:<line>)` | `com.example.OrderMapper#selectById(OrderMapper.java:88)` |
+| Java JDBC | `<className>#<methodName>(<file>:<line>)` | `com.example.OrderDao#countByStatus(OrderDao.java:123)` |
 
-`normalized` 只输出 `sqlObjects[].normalizedSql`，不包含 summary、诊断、来源位置等元数据。
-
-精简诊断 JSON 用 `--format compact-json`，输出以 diagnostics 为主视角：每条诊断直接带上对应 SQL 的 `identity.sourceKey`、`identity.logicalName`、`normalizedSql`、`severity`、`message`、`tableName`、`expectedRouteFields`、`columns`。
-
-Excel 输出用 `--format excel`，字段和 `compact-json` 完全一致，一条诊断一行：
-
-```bash
-java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  --path /path/to/your-java-project \
-  --config /path/to/your-java-project/route-sql.yml \
-  --format excel \
-  --output /path/to/your-java-project/route-sql-diagnostics.xlsx \
-  --failed-only \
-  --fail-on NEVER
-```
-
-如果不想在构建命令里传 `--format`，可以在目标项目根目录放 `route-sql-report.yml`：
-
-```yaml
-format: compact-json
-```
-
-这个文件只控制报告输出形态，不控制扫描规则。扫描规则仍然放在 `route-sql.yml` 或 `--config` 指向的配置文件里。
-
-只输出未通过校验规则的 SQL 时，加 `--failed-only`。该选项支持 `json`、`compact-json`、`excel` 和 `normalized` 输出；`json` 会保留报告结构，但只包含有诊断的 `sqlObjects` 以及对应 diagnostics：
-
-```bash
-java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  --path /path/to/your-java-project \
-  --config /path/to/your-java-project/route-sql.yml \
-  --format compact-json \
-  --failed-only \
-  --fail-on NEVER
-```
-
-不指定 `--output` 时，报告会输出到 stdout：
-
-```bash
-java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
-  --path /path/to/your-java-project \
-  --config /path/to/your-java-project/route-sql.yml \
-  --format json \
-  --fail-on NEVER
-```
+文件路径只取文件名（IDEA 行为），方便直接粘进 "Navigate → File"。
 
 ## 5. 只扫描部分文件
 
@@ -209,13 +131,10 @@ java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
   --path /path/to/your-java-project/src/main/resources/mapper \
   --path /path/to/your-java-project/src/main/java \
-  --config /path/to/your-java-project/route-sql.yml \
-  --format json \
-  --output /path/to/your-java-project/route-sql-report.json \
-  --fail-on NEVER
+  --output /path/to/your-java-project/route-sql-inventory.json
 ```
 
-可以用 `--include` 和 `--exclude` 控制 glob：
+用 `--include`/`--exclude` 控制 glob：
 
 ```bash
 java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
@@ -224,146 +143,59 @@ java -jar /path/to/route-sql-scanner/target/route-sql-scanner-0.1.0.jar scan \
   --include "**/*.java" \
   --exclude "**/target/**" \
   --exclude "**/build/**" \
-  --config /path/to/your-java-project/route-sql.yml \
-  --format markdown \
-  --output /path/to/your-java-project/route-sql-report.md \
-  --fail-on NEVER
+  --output /path/to/your-java-project/route-sql-inventory.json
 ```
 
 默认不传 include 时，工具会扫描 `.xml` 和 `.java` 文件。
 
-## 6. 输出内容怎么看
+## 6. 退出码
 
-JSON 顶层大致是：
+- `0`：扫描完成（始终返回 0，无论 sqls 是否为空）。
+- `3`：I/O 失败或解析异常。
 
-```json
-{
-  "version": "0.1.0",
-  "dialect": "mysql",
-  "summary": {
-    "filesScanned": 6,
-    "sqlCount": 10,
-    "diagnosticCount": 3
-  },
-  "sqlObjects": [],
-  "diagnostics": []
-}
-```
+扫描器不再判定 ERROR/WARN —— 没诊断就没等级，等级判定由服务端给出。
 
-重点看：
-
-- `summary.filesScanned`：扫描到的文件数。
-- `summary.sqlCount`：提取出的 SQL 或 MyBatis `<sql>` fragment 数。
-- `summary.diagnosticCount`：诊断数。
-- `sqlObjects[].identity.logicalName`：SQL 的逻辑身份，比如 `com.foo.OrderMapper.findById`。
-- `sqlObjects[].origin.file/line/column`：SQL 来源位置。
-- `sqlObjects[].normalizedSql`：归一化后的 SQL。
-- `sqlObjects[].parse.tables`：解析出的表名。
-- `diagnostics[]`：缺路由字段等问题。
-
-一条缺路由字段诊断通常会包含：
-
-```json
-{
-  "id": "ROUTE-MISSING-001",
-  "severity": "ERROR",
-  "message": "SQL references table `orders` but does not constrain any route field: tenant_id, order_id",
-  "tableName": "orders",
-  "expectedRouteFields": ["tenant_id", "order_id"],
-  "snippet": "SELECT id, status FROM orders WHERE id = ?"
-}
-```
-
-`snippet` 字段当前保存完整 normalized SQL，不再做长度截断。
-
-如果使用轻量 JSON 的 `requiredColumns` 且缺少其中一部分字段，诊断消息会指出实际缺少哪些必要列：
-
-```json
-{
-  "id": "ROUTE-MISSING-001",
-  "message": "SQL references table `orders` but WHERE/INSERT columns miss required route fields: order_id",
-  "tableName": "orders",
-  "expectedRouteFields": ["tenant_id", "order_id"]
-}
-```
-
-## 7. 退出码和 CI 用法
-
-`--fail-on` 控制扫描结果是否让进程失败：
-
-- `--fail-on NEVER`：永远返回 0，适合本地先拿报告。
-- `--fail-on ERROR`：存在 ERROR 诊断时返回 2。
-- `--fail-on WARN`：存在 WARN 返回 1，存在 ERROR 返回 2。
-
-本地快速生成报告建议使用：
-
-```bash
---fail-on NEVER
-```
-
-CI 阶段想拦截缺路由字段，可以使用：
-
-```bash
---fail-on ERROR
-```
-
-## 8. 当前能识别什么
+## 7. 当前能识别什么
 
 MyBatis XML：
 
-- `<select>`
-- `<insert>`
-- `<update>`
-- `<delete>`
-- `<sql>`
-- `<include refid="..."/>`
-- 常见动态标签的近似展开：`if/choose/when/otherwise/foreach/trim/where/set/bind`
+- `<select>` / `<insert>` / `<update>` / `<delete>` / `<sql>` / `<include refid="..."/>`
+- 常见动态标签的近似枚举：`if/choose/when/otherwise/foreach/trim/where/set/bind`
+- `<if>` 会展开成"包含/省略"两种分支；同一个 statement 可能产出多条 SQL，都共享同一 `at`，仅 `sql` 不同
 
 MyBatis 注解：
 
-- `@Select`
-- `@Insert`
-- `@Update`
-- `@Delete`
-- 支持单个字符串：`@Select("SELECT ...")`
-- 支持字符串数组：`@Select({"SELECT ...", "FROM ..."})`
-- 支持注解里的 `<script>/<where>/<if>` 等动态标签近似展开
+- `@Select` / `@Insert` / `@Update` / `@Delete`
+- 单字符串：`@Select("SELECT ...")`
+- 字符串数组：`@Select({"SELECT ...", "FROM ..."})`
+- 字符串拼接、text block
+- 注解内 `<script>/<where>/<if>` 等动态标签近似展开
 
-Java：
+Java JDBC-like：
 
-- `connection.prepareStatement("SELECT ...")`
-- `statement.execute("UPDATE ...")`
-- `statement.executeQuery("SELECT ...")`
-- `statement.executeUpdate("UPDATE ...")`
-- `jdbcTemplate.query("SELECT ...")`
-- `jdbcTemplate.update("UPDATE ...")`
+- `connection.prepareStatement("...")`
+- `statement.execute/executeQuery/executeUpdate("...")`
+- `jdbcTemplate.query/update("...")`
 - 同方法内简单 `String sql = "..."; prepareStatement(sql)`
-- 简单字符串拼接
-- Java text block
+- 简单字符串拼接、Java text block
 
-## 9. 当前限制
+## 8. 当前限制
 
-- 工具是静态扫描，不连接数据库，也不执行 SQL。
-- MyBatis 动态 SQL 是近似重建，不模拟真实运行时所有分支。
-- MyBatis 注解的 `@SelectProvider/@InsertProvider/@UpdateProvider/@DeleteProvider` 暂不提取，因为 SQL 来自 provider 方法。
-- Java 代码不做完整跨文件符号解析。
-- 路由字段规则 V0 是“字段出现即满足”，不会完整判断谓词可达性。
-- `<sql>` fragment 会进入 SQL 清单，但 fragment 往往不是完整 SQL，解析失败是正常现象。
+- 静态扫描，不连接数据库、不执行 SQL。
+- MyBatis 动态 SQL 是近似重建，不模拟运行时所有分支。
+- `@SelectProvider/@InsertProvider/...` 暂不提取。
+- Java 代码不做跨文件符号解析。
+- `<sql>` fragment 会进入 SQL 清单，但 fragment 往往不是完整 SQL，由服务端识别处理。
 
-## 10. 用内置 fixture 试跑
+扫描器不再做任何路由字段校验。校验、规范化、表名提取等全部由服务端在收到 inventory 后完成。
+
+## 9. 用内置 fixture 试跑
 
 在工具项目根目录可用内置测试数据试跑：
 
 ```bash
 java -jar target/route-sql-scanner-0.1.0.jar scan \
-  --path src/test/resources/fixtures \
-  --config src/test/resources/fixtures/route-sql.yml \
-  --format json \
-  --fail-on NEVER
+  --path src/test/resources/fixtures
 ```
 
-预期能看到：
-
-- `filesScanned = 6`
-- `sqlCount = 10`
-- `diagnosticCount = 3`
+预期能看到一份 `v: 2` 的 JSON，`sqls` 数组里包含 MyBatis XML、MyBatis 注解、Java JDBC 三类来源各自的 `at` + `sql`。

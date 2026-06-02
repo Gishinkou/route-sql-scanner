@@ -11,7 +11,6 @@
   <properties>
     <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <jsqlparser.version>5.3</jsqlparser.version>
     <javaparser.version>3.28.0</javaparser.version>
     <jackson.version>2.21.2</jackson.version>
     <picocli.version>4.7.7</picocli.version>
@@ -24,11 +23,6 @@
       <groupId>info.picocli</groupId>
       <artifactId>picocli</artifactId>
       <version>${picocli.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>com.github.jsqlparser</groupId>
-      <artifactId>jsqlparser</artifactId>
-      <version>${jsqlparser.version}</version>
     </dependency>
     <dependency>
       <groupId>com.github.javaparser</groupId>

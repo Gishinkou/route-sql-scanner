@@ -1,13 +1,13 @@
 package com.acme.routesql.config;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.nio.file.Path;
 
 public class ScannerConfig {
-  private String dialect = "mysql";
-  private RouteRuleConfig routeRules = new RouteRuleConfig();
+  private String project;
 
   public static ScannerConfig load(Path path) throws IOException {
     if (path == null) {
@@ -16,31 +16,16 @@ public class ScannerConfig {
     ObjectMapper mapper = path.toString().endsWith(".json")
         ? new ObjectMapper()
         : new ObjectMapper(new YAMLFactory());
-    var tree = mapper.readTree(path.toFile());
-    tree = new ConfigPreprocessors().preprocess(tree, mapper);
-    ScannerConfig config = mapper.treeToValue(tree, ScannerConfig.class);
-    if (config.routeRules == null) {
-      config.routeRules = new RouteRuleConfig();
-    }
-    if (config.dialect == null || config.dialect.isBlank()) {
-      config.dialect = "mysql";
-    }
-    return config;
+    mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    ScannerConfig config = mapper.readValue(path.toFile(), ScannerConfig.class);
+    return config == null ? new ScannerConfig() : config;
   }
 
-  public String getDialect() {
-    return dialect;
+  public String getProject() {
+    return project;
   }
 
-  public void setDialect(String dialect) {
-    this.dialect = dialect;
-  }
-
-  public RouteRuleConfig getRouteRules() {
-    return routeRules;
-  }
-
-  public void setRouteRules(RouteRuleConfig routeRules) {
-    this.routeRules = routeRules;
+  public void setProject(String project) {
+    this.project = project;
   }
 }

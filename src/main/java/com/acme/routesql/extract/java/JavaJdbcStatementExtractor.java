@@ -5,8 +5,8 @@ import com.acme.routesql.extract.SqlExtractor;
 import com.acme.routesql.model.SourceKind;
 import com.acme.routesql.model.SqlObject;
 import com.acme.routesql.model.SqlOrigin;
+import com.acme.routesql.util.JavaSourceParser;
 import com.acme.routesql.util.SqlObjects;
-import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -50,7 +50,7 @@ public class JavaJdbcStatementExtractor implements SqlExtractor {
 
   @Override
   public List<SqlObject> extract(Path path, ExtractionContext context) throws Exception {
-    CompilationUnit unit = StaticJavaParser.parse(path);
+    CompilationUnit unit = JavaSourceParser.parse(path);
     String className = unit.getPrimaryTypeName().orElse(path.getFileName().toString().replaceFirst("\\.java$", ""));
     List<SqlObject> objects = new ArrayList<>();
 
@@ -70,7 +70,6 @@ public class JavaJdbcStatementExtractor implements SqlExtractor {
           int line = call.getBegin().map(p -> p.line).orElse(1);
           int column = call.getBegin().map(p -> p.column).orElse(1);
           String raw = evaluated.sql();
-          String normalized = context.normalizer().normalize(raw);
           SqlOrigin origin = new SqlOrigin(
               SourceKind.JAVA_JDBC,
               path.toAbsolutePath().normalize(),
@@ -78,18 +77,11 @@ public class JavaJdbcStatementExtractor implements SqlExtractor {
               column,
               null,
               null,
-              statementType(normalized),
+              null,
               className,
               method.getNameAsString()
           );
-          objects.add(SqlObjects.create(
-              raw,
-              normalized,
-              origin,
-              evaluated.dynamic(),
-              evaluated.dynamic() ? List.of("java", "jdbc", "dynamic") : List.of("java", "jdbc"),
-              Map.of("extractor", name(), "methodCall", call.getNameAsString())
-          ));
+          objects.add(SqlObjects.create(raw, origin, evaluated.dynamic()));
         }
       }, null);
     }
@@ -163,23 +155,6 @@ public class JavaJdbcStatementExtractor implements SqlExtractor {
         || normalized.startsWith("UPDATE ")
         || normalized.startsWith("DELETE ")
         || normalized.startsWith("WITH ");
-  }
-
-  private String statementType(String sql) {
-    String normalized = sql.stripLeading().toUpperCase(Locale.ROOT);
-    if (normalized.startsWith("SELECT") || normalized.startsWith("WITH")) {
-      return "SELECT";
-    }
-    if (normalized.startsWith("INSERT")) {
-      return "INSERT";
-    }
-    if (normalized.startsWith("UPDATE")) {
-      return "UPDATE";
-    }
-    if (normalized.startsWith("DELETE")) {
-      return "DELETE";
-    }
-    return "UNKNOWN";
   }
 
   private record EvalResult(String sql, boolean dynamic) {}

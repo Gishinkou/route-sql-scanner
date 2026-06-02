@@ -3,7 +3,6 @@ package com.acme.routesql.extract.mybatis;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -17,28 +16,21 @@ final class MyBatisSqlScriptBuilder {
   private MyBatisSqlScriptBuilder() {}
 
   static BuildResult buildChildren(Element element, Map<String, Element> fragments) {
-    List<BuildResult> variants = buildChildrenVariants(element, fragments);
-    return variants.isEmpty() ? new BuildResult("", false) : variants.get(0);
-  }
-
-  static List<BuildResult> buildChildrenVariants(Element element, Map<String, Element> fragments) {
-    List<BuildResult> variants = List.of(new BuildResult("", false));
+    StringBuilder sql = new StringBuilder();
+    boolean dynamic = false;
     NodeList nodes = element.getChildNodes();
     for (int i = 0; i < nodes.getLength(); i++) {
-      variants = combine(variants, buildNodeVariants(nodes.item(i), fragments));
+      BuildResult part = buildNode(nodes.item(i), fragments);
+      appendSql(sql, part.sql());
+      dynamic |= part.dynamic();
     }
-    return dedupe(variants);
+    return new BuildResult(normalizeSpace(sql.toString()), dynamic);
   }
 
   static BuildResult buildAnnotationScript(String sql) {
-    List<BuildResult> variants = buildAnnotationScripts(sql);
-    return variants.isEmpty() ? new BuildResult("", false) : variants.get(0);
-  }
-
-  static List<BuildResult> buildAnnotationScripts(String sql) {
     String trimmed = sql.trim();
     if (!looksLikeXmlScript(trimmed)) {
-      return List.of(new BuildResult(sql, false));
+      return new BuildResult(sql, false);
     }
     try {
       String wrapped = trimmed.matches("(?is)^\\s*<script\\b.*")
@@ -46,9 +38,10 @@ final class MyBatisSqlScriptBuilder {
           : "<script>" + trimmed + "</script>";
       Document document = newDocument(wrapped);
       Element script = document.getDocumentElement();
-      return markDynamic(buildChildrenVariants(script, Map.of()));
+      BuildResult built = buildChildren(script, Map.of());
+      return new BuildResult(built.sql(), true);
     } catch (Exception ignored) {
-      return List.of(new BuildResult(stripDynamicTags(sql), true));
+      return new BuildResult(normalizeSpace(stripDynamicTags(sql)), true);
     }
   }
 
@@ -64,75 +57,74 @@ final class MyBatisSqlScriptBuilder {
     return elements;
   }
 
-  private static List<BuildResult> buildNodeVariants(Node node, Map<String, Element> fragments) {
+  private static BuildResult buildNode(Node node, Map<String, Element> fragments) {
     if (node.getNodeType() == Node.TEXT_NODE || node.getNodeType() == Node.CDATA_SECTION_NODE) {
-      return List.of(new BuildResult(node.getTextContent(), false));
+      return new BuildResult(node.getTextContent(), false);
     }
     if (node.getNodeType() != Node.ELEMENT_NODE) {
-      return List.of(new BuildResult("", false));
+      return new BuildResult("", false);
     }
 
     Element element = (Element) node;
     String tag = element.getTagName();
     return switch (tag) {
-      case "include" -> includeVariants(element, fragments);
-      case "where" -> keywordBlockVariants("WHERE", buildChildrenVariants(element, fragments), true, true);
-      case "set" -> keywordBlockVariants("SET", buildChildrenVariants(element, fragments), true, false);
-      case "trim" -> trimVariants(element, fragments);
-      case "foreach" -> List.of(new BuildResult("(__FOREACH__)", true));
-      case "if" -> ifVariants(element, fragments);
-      case "choose" -> chooseVariants(element, fragments);
-      case "when", "otherwise", "script" -> markDynamic(buildChildrenVariants(element, fragments));
-      case "bind" -> List.of(new BuildResult("", true));
+      case "include" -> includeBuild(element, fragments);
+      case "where" -> keywordBlock("WHERE", buildChildren(element, fragments), true, true);
+      case "set" -> keywordBlock("SET", buildChildren(element, fragments), true, false);
+      case "trim" -> trimBuild(element, fragments);
+      case "foreach" -> new BuildResult("(__FOREACH__)", true);
+      case "if" -> ifBuild(element, fragments);
+      case "choose" -> chooseBuild(element, fragments);
+      case "when", "otherwise", "script" -> {
+        BuildResult inner = buildChildren(element, fragments);
+        yield new BuildResult(inner.sql(), true);
+      }
+      case "bind" -> new BuildResult("", true);
       default -> {
-        yield markDynamic(buildChildrenVariants(element, fragments));
+        BuildResult inner = buildChildren(element, fragments);
+        yield new BuildResult(inner.sql(), true);
       }
     };
   }
 
-  private static List<BuildResult> includeVariants(Element element, Map<String, Element> fragments) {
+  private static BuildResult includeBuild(Element element, Map<String, Element> fragments) {
     Element fragment = fragments.get(element.getAttribute("refid"));
     if (fragment == null) {
-      return List.of(new BuildResult(" __MISSING_INCLUDE__ ", true));
+      return new BuildResult(" __MISSING_INCLUDE__ ", true);
     }
-    return buildChildrenVariants(fragment, fragments);
+    return buildChildren(fragment, fragments);
   }
 
-  private static List<BuildResult> ifVariants(Element element, Map<String, Element> fragments) {
-    List<BuildResult> variants = new ArrayList<>();
-    variants.add(new BuildResult("", true));
-    variants.addAll(markDynamic(buildChildrenVariants(element, fragments)));
-    return dedupe(variants);
+  private static BuildResult ifBuild(Element element, Map<String, Element> fragments) {
+    BuildResult body = buildChildren(element, fragments);
+    String inner = body.sql().trim();
+    if (inner.isEmpty()) {
+      return new BuildResult("", true);
+    }
+    return new BuildResult("/*?if*/ " + inner + " /*?endif*/", true);
   }
 
-  private static List<BuildResult> chooseVariants(Element element, Map<String, Element> fragments) {
-    List<BuildResult> variants = new ArrayList<>();
-    boolean hasOtherwise = false;
+  private static BuildResult chooseBuild(Element element, Map<String, Element> fragments) {
+    List<String> branches = new ArrayList<>();
     for (Element child : childElements(element)) {
       String tag = child.getTagName();
-      if ("when".equals(tag) || "otherwise".equals(tag)) {
-        hasOtherwise |= "otherwise".equals(tag);
-        variants.addAll(markDynamic(buildChildrenVariants(child, fragments)));
+      if (!"when".equals(tag) && !"otherwise".equals(tag)) {
+        continue;
+      }
+      String branch = buildChildren(child, fragments).sql().trim();
+      if (!branch.isEmpty()) {
+        branches.add("/*?branch*/ " + branch + " /*?endbranch*/");
       }
     }
-    if (!hasOtherwise) {
-      variants.add(new BuildResult("", true));
+    if (branches.isEmpty()) {
+      BuildResult inner = buildChildren(element, fragments);
+      return new BuildResult(inner.sql(), true);
     }
-    if (variants.isEmpty()) {
-      return markDynamic(buildChildrenVariants(element, fragments));
-    }
-    return dedupe(variants);
+    return new BuildResult("/*?choose*/ " + String.join(" /*?or*/ ", branches) + " /*?endchoose*/", true);
   }
 
-  private static List<BuildResult> trimVariants(Element element, Map<String, Element> fragments) {
-    List<BuildResult> variants = new ArrayList<>();
-    for (BuildResult children : buildChildrenVariants(element, fragments)) {
-      variants.add(trimVariant(element, children));
-    }
-    return dedupe(variants);
-  }
-
-  private static BuildResult trimVariant(Element element, BuildResult children) {
+  private static BuildResult trimBuild(Element element, Map<String, Element> fragments) {
+    BuildResult children = buildChildren(element, fragments);
     String body = children.sql();
     String prefixOverrides = element.getAttribute("prefixOverrides");
     if (!prefixOverrides.isBlank()) {
@@ -153,68 +145,27 @@ final class MyBatisSqlScriptBuilder {
     return new BuildResult((prefix + " " + body + " " + suffix).trim(), true);
   }
 
-  private static List<BuildResult> keywordBlockVariants(
+  private static BuildResult keywordBlock(
       String keyword,
-      List<BuildResult> bodies,
+      BuildResult body,
       boolean dynamic,
       boolean stripLeadingBoolean
   ) {
-    List<BuildResult> variants = new ArrayList<>();
-    for (BuildResult body : bodies) {
-      String sql = stripLeadingBoolean ? stripLeadingBoolean(body.sql()) : stripTrailingComma(body.sql());
-      variants.add(keywordBlock(keyword, sql, dynamic || body.dynamic()));
+    String sql = stripLeadingBoolean ? stripLeadingBoolean(body.sql()) : stripTrailingComma(body.sql());
+    if (sql == null || sql.isBlank()) {
+      return new BuildResult("", dynamic || body.dynamic());
     }
-    return dedupe(variants);
+    return new BuildResult(keyword + " " + sql, dynamic || body.dynamic());
   }
 
-  private static BuildResult keywordBlock(String keyword, String body, boolean dynamic) {
-    if (body == null || body.isBlank()) {
-      return new BuildResult("", dynamic);
-    }
-    return new BuildResult(keyword + " " + body, dynamic);
-  }
-
-  private static List<BuildResult> combine(List<BuildResult> left, List<BuildResult> right) {
-    List<BuildResult> combined = new ArrayList<>();
-    for (BuildResult leftResult : left) {
-      for (BuildResult rightResult : right) {
-        combined.add(new BuildResult(
-            appendSql(leftResult.sql(), rightResult.sql()),
-            leftResult.dynamic() || rightResult.dynamic()
-        ));
-      }
-    }
-    return dedupe(combined);
-  }
-
-  private static String appendSql(String left, String right) {
-    if (left == null || left.isBlank()) {
-      return right == null ? "" : right;
-    }
+  private static void appendSql(StringBuilder buffer, String right) {
     if (right == null || right.isBlank()) {
-      return left;
+      return;
     }
-    return left + " " + right;
-  }
-
-  private static List<BuildResult> markDynamic(List<BuildResult> variants) {
-    return variants.stream()
-        .map(variant -> new BuildResult(variant.sql(), true))
-        .toList();
-  }
-
-  private static List<BuildResult> dedupe(List<BuildResult> variants) {
-    Map<String, BuildResult> deduped = new LinkedHashMap<>();
-    for (BuildResult variant : variants) {
-      String key = normalizeSpace(variant.sql());
-      BuildResult existing = deduped.get(key);
-      if (existing == null) {
-        deduped.put(key, variant);
-      } else if (!existing.dynamic() && variant.dynamic()) {
-        deduped.put(key, new BuildResult(existing.sql(), true));
-      }
+    if (buffer.length() > 0 && buffer.charAt(buffer.length() - 1) != ' ') {
+      buffer.append(' ');
     }
-    return new ArrayList<>(deduped.values());
+    buffer.append(right);
   }
 
   private static String normalizeSpace(String sql) {

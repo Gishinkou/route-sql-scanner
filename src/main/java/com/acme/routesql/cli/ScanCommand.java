@@ -1,22 +1,14 @@
 package com.acme.routesql.cli;
 
-import com.acme.routesql.config.ReportConfig;
 import com.acme.routesql.config.ScannerConfig;
 import com.acme.routesql.core.ScanEngine;
 import com.acme.routesql.model.ScanReport;
-import com.acme.routesql.report.CompactJsonReporter;
-import com.acme.routesql.report.ExcelReporter;
-import com.acme.routesql.report.JsonReporter;
-import com.acme.routesql.report.JsonlReporter;
-import com.acme.routesql.report.MarkdownReporter;
-import com.acme.routesql.report.NormalizedSqlReporter;
-import com.acme.routesql.report.ReportFilters;
+import com.acme.routesql.report.CompactInventoryReporter;
 import com.acme.routesql.report.Reporter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -32,9 +24,6 @@ public class ScanCommand implements Callable<Integer> {
   @Option(names = "--config", description = "YAML or JSON scanner config.")
   private Path configPath;
 
-  @Option(names = "--format", description = "json | compact-json | excel | jsonl | markdown | normalized")
-  private String format;
-
   @Option(names = "--output", description = "Output file. Defaults to stdout.")
   private Path output;
 
@@ -44,21 +33,13 @@ public class ScanCommand implements Callable<Integer> {
   @Option(names = "--exclude", description = "Glob exclude. Repeatable.")
   private List<String> excludes = new ArrayList<>();
 
-  @Option(names = "--fail-on", defaultValue = "ERROR", description = "ERROR | WARN | NEVER")
-  private String failOn;
-
-  @Option(names = "--failed-only", description = "Only output SQL statements that have rule diagnostics.")
-  private boolean failedOnly;
-
   @Override
   public Integer call() {
     try {
       ScannerConfig config = ScannerConfig.load(configPath);
       ScanReport report = new ScanEngine(config).scan(paths, includes, excludes);
-      ReportConfig reportConfig = ReportConfig.discover(configPath, paths);
-      ScanReport outputReport = failedOnly ? ReportFilters.failedSqlOnly(report) : report;
-      Reporter reporter = reporter(reportConfig.effectiveFormat(format));
-      byte[] rendered = reporter.renderBytes(outputReport);
+      Reporter reporter = new CompactInventoryReporter();
+      byte[] rendered = reporter.renderBytes(report);
       if (output == null) {
         System.out.write(rendered);
       } else {
@@ -68,39 +49,11 @@ public class ScanCommand implements Callable<Integer> {
         }
         Files.write(output, rendered);
       }
-      return exitCode(report, failOn);
+      return 0;
     } catch (Exception e) {
       System.err.println("scan failed: " + e.getMessage());
       e.printStackTrace(System.err);
       return 3;
     }
-  }
-
-  private Reporter reporter(String requested) {
-    return switch (requested.toLowerCase(Locale.ROOT)) {
-      case "json" -> new JsonReporter();
-      case "compact-json" -> new CompactJsonReporter();
-      case "excel" -> new ExcelReporter();
-      case "jsonl" -> new JsonlReporter();
-      case "markdown" -> new MarkdownReporter();
-      case "normalized" -> new NormalizedSqlReporter();
-      default -> throw new IllegalArgumentException("unsupported format: " + requested);
-    };
-  }
-
-  private int exitCode(ScanReport report, String failOn) {
-    String normalized = failOn.toUpperCase(Locale.ROOT);
-    if ("NEVER".equals(normalized)) {
-      return 0;
-    }
-    boolean hasError = report.diagnostics().stream().anyMatch(d -> "ERROR".equalsIgnoreCase(d.severity()));
-    boolean hasWarn = report.diagnostics().stream().anyMatch(d -> "WARN".equalsIgnoreCase(d.severity()));
-    if (hasError && ("ERROR".equals(normalized) || "WARN".equals(normalized))) {
-      return 2;
-    }
-    if (hasWarn && "WARN".equals(normalized)) {
-      return 1;
-    }
-    return 0;
   }
 }

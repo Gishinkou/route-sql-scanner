@@ -5,8 +5,10 @@ public class SqlNormalizer {
     if (sql == null) {
       return "";
     }
-    return sql
-        .replaceAll("/\\*.*?\\*/", " ")
+    String collapsed = sql.contains("/*?")
+        ? sql.replaceAll("/\\*(?!\\?)[^*]*?\\*/", " ")
+        : sql.replaceAll("/\\*.*?\\*/", " ");
+    return collapsed
         .replaceAll("--[^\\r\\n]*", " ")
         .replaceAll("\\s+", " ")
         .trim();

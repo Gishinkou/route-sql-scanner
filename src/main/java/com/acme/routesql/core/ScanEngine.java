@@ -6,14 +6,9 @@ import com.acme.routesql.extract.SqlExtractor;
 import com.acme.routesql.extract.java.JavaJdbcStatementExtractor;
 import com.acme.routesql.extract.mybatis.MyBatisAnnotationExtractor;
 import com.acme.routesql.extract.mybatis.MyBatisXmlExtractor;
-import com.acme.routesql.model.Diagnostic;
 import com.acme.routesql.model.ScanReport;
-import com.acme.routesql.model.ScanSummary;
 import com.acme.routesql.model.SqlObject;
 import com.acme.routesql.normalize.SqlNormalizer;
-import com.acme.routesql.parse.SqlParserFacade;
-import com.acme.routesql.rule.RouteFieldRule;
-import com.acme.routesql.rule.SqlRule;
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -26,8 +21,6 @@ import java.util.List;
 public class ScanEngine {
   private final ScannerConfig config;
   private final List<SqlExtractor> extractors;
-  private final SqlParserFacade parser;
-  private final List<SqlRule> rules;
 
   public ScanEngine(ScannerConfig config) {
     this.config = config;
@@ -36,30 +29,25 @@ public class ScanEngine {
         new MyBatisAnnotationExtractor(),
         new JavaJdbcStatementExtractor()
     );
-    this.parser = new SqlParserFacade(config.getDialect());
-    this.rules = List.of(new RouteFieldRule(config.getRouteRules()));
   }
 
   public ScanReport scan(List<Path> paths, List<String> includes, List<String> excludes) throws Exception {
     List<Path> files = discover(paths, includes, excludes);
     ExtractionContext context = new ExtractionContext(new SqlNormalizer());
-    List<SqlObject> parsedObjects = new ArrayList<>();
+    List<SqlObject> sqlObjects = new ArrayList<>();
     for (Path file : files) {
       for (SqlExtractor extractor : extractors) {
-        if (extractor.supports(file)) {
-          for (SqlObject object : extractor.extract(file, context)) {
-            parsedObjects.add(object.withParse(parser.parse(object.rawSql())));
-          }
+        if (!extractor.supports(file)) {
+          continue;
+        }
+        try {
+          sqlObjects.addAll(extractor.extract(file, context));
+        } catch (Exception e) {
+          System.err.println("warn: " + extractor.name() + " failed on " + file + ": " + e.getMessage());
         }
       }
     }
-
-    List<Diagnostic> diagnostics = new ArrayList<>();
-    for (SqlRule rule : rules) {
-      diagnostics.addAll(rule.apply(parsedObjects));
-    }
-    ScanSummary summary = new ScanSummary(files.size(), parsedObjects.size(), diagnostics.size());
-    return new ScanReport("0.1.0", config.getDialect(), summary, parsedObjects, diagnostics);
+    return new ScanReport(config.getProject(), sqlObjects);
   }
 
   private List<Path> discover(List<Path> paths, List<String> includes, List<String> excludes) throws IOException {
