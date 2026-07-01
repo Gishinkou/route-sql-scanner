@@ -59,7 +59,7 @@ public class MyBatisXmlExtractor implements SqlExtractor {
     List<SqlObject> objects = new ArrayList<>();
     for (Element statement : MyBatisSqlScriptBuilder.childElements(mapper)) {
       String tagName = statement.getTagName();
-      if (!STATEMENT_TAGS.contains(tagName) && !"sql".equals(tagName)) {
+      if (!STATEMENT_TAGS.contains(tagName)) {
         continue;
       }
       String statementId = statement.getAttribute("id");
@@ -75,7 +75,7 @@ public class MyBatisXmlExtractor implements SqlExtractor {
           location.column(),
           namespace,
           statementId,
-          "sql".equals(tagName) ? "FRAGMENT" : tagName.toUpperCase(Locale.ROOT),
+          tagName.toUpperCase(Locale.ROOT),
           null,
           null
       );
