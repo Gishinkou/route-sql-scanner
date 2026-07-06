@@ -5,7 +5,7 @@
 
   <groupId>com.acme</groupId>
   <artifactId>route-sql-scanner</artifactId>
-  <version>0.1.0</version>
+  <version>0.3.0</version>
   <name>route-sql-scanner</name>
 
   <properties>

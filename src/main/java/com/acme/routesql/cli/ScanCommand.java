@@ -24,6 +24,11 @@ public class ScanCommand implements Callable<Integer> {
   @Option(names = "--config", description = "YAML or JSON scanner config.")
   private Path configPath;
 
+  @Option(names = "--project-root",
+      description = "Project root used to compute origin sourcePath/resourcePath. "
+          + "Defaults to the sole scan --path when it is a directory.")
+  private Path projectRoot;
+
   @Option(names = "--output", description = "Output file. Defaults to stdout.")
   private Path output;
 
@@ -38,7 +43,7 @@ public class ScanCommand implements Callable<Integer> {
     try {
       ScannerConfig config = ScannerConfig.load(configPath);
       ScanReport report = new ScanEngine(config).scan(paths, includes, excludes);
-      Reporter reporter = new CompactInventoryReporter();
+      Reporter reporter = new CompactInventoryReporter(resolveProjectRoot(config));
       byte[] rendered = reporter.renderBytes(report);
       if (output == null) {
         System.out.write(rendered);
@@ -55,5 +60,18 @@ public class ScanCommand implements Callable<Integer> {
       e.printStackTrace(System.err);
       return 3;
     }
+  }
+
+  private Path resolveProjectRoot(ScannerConfig config) {
+    if (projectRoot != null) {
+      return projectRoot;
+    }
+    if (config.getProjectRoot() != null && !config.getProjectRoot().isBlank()) {
+      return Path.of(config.getProjectRoot());
+    }
+    if (paths.size() == 1 && Files.isDirectory(paths.get(0))) {
+      return paths.get(0);
+    }
+    return null;
   }
 }

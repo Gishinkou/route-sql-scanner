@@ -56,7 +56,42 @@ class ScanEngineTest {
     assertTrue(at.contains("(") && at.endsWith(")"));
     assertFalse(first.has("normalizedSql"));
     assertFalse(first.has("identity"));
-    assertFalse(first.has("origin"));
+    assertTrue(first.has("origin"));
+    assertTrue(first.get("origin").has("sourceType"));
+  }
+
+  @Test
+  void emitsEnrichedOriginPerSourceType() throws Exception {
+    Path fixtureDir = Path.of("src/test/resources/fixtures").toAbsolutePath();
+    ScannerConfig config = new ScannerConfig();
+    config.setProject("acme");
+
+    ScanReport report = new ScanEngine(config).scan(List.of(fixtureDir), List.of(), List.of());
+    String rendered = new CompactInventoryReporter(fixtureDir).render(report);
+    JsonNode sqls = new ObjectMapper().readTree(rendered).get("sqls");
+
+    JsonNode xml = originOfType(sqls, "mybatis_xml");
+    assertTrue(xml.has("namespace"), "xml origin should carry namespace");
+    assertTrue(xml.has("statementId"), "xml origin should carry statementId");
+
+    JsonNode annotation = originOfType(sqls, "mybatis_annotation");
+    assertTrue(annotation.has("namespace"), "annotation origin should carry namespace");
+    assertTrue(annotation.has("statementId"), "annotation origin should carry statementId");
+    assertFalse(annotation.has("resourcePath"), "annotation origin should not carry resourcePath");
+
+    JsonNode jdbc = originOfType(sqls, "java_literal_sql");
+    assertTrue(jdbc.has("enclosingClass"), "jdbc origin should carry enclosingClass");
+    assertFalse(jdbc.has("namespace"), "jdbc origin should not carry namespace");
+  }
+
+  private static JsonNode originOfType(JsonNode sqls, String sourceType) {
+    for (JsonNode sql : sqls) {
+      JsonNode origin = sql.get("origin");
+      if (origin != null && sourceType.equals(origin.path("sourceType").asText())) {
+        return origin;
+      }
+    }
+    throw new AssertionError("no origin with sourceType=" + sourceType);
   }
 
   @Test

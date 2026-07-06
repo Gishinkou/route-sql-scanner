@@ -8,6 +8,7 @@ import java.nio.file.Path;
 
 public class ScannerConfig {
   private String project;
+  private String projectRoot;
 
   public static ScannerConfig load(Path path) throws IOException {
     if (path == null) {
@@ -27,5 +28,13 @@ public class ScannerConfig {
 
   public void setProject(String project) {
     this.project = project;
+  }
+
+  public String getProjectRoot() {
+    return projectRoot;
+  }
+
+  public void setProjectRoot(String projectRoot) {
+    this.projectRoot = projectRoot;
   }
 }

@@ -72,7 +72,7 @@ final class MyBatisSqlScriptBuilder {
       case "where" -> keywordBlock("WHERE", buildChildren(element, fragments), true, true);
       case "set" -> keywordBlock("SET", buildChildren(element, fragments), true, false);
       case "trim" -> trimBuild(element, fragments);
-      case "foreach" -> new BuildResult("(__FOREACH__)", true);
+      case "foreach" -> foreachBuild(element, fragments);
       case "if" -> ifBuild(element, fragments);
       case "choose" -> chooseBuild(element, fragments);
       case "when", "otherwise", "script" -> {
@@ -93,6 +93,16 @@ final class MyBatisSqlScriptBuilder {
       return new BuildResult(" __MISSING_INCLUDE__ ", true);
     }
     return buildChildren(fragment, fragments);
+  }
+
+  private static BuildResult foreachBuild(Element element, Map<String, Element> fragments) {
+    String body = buildChildren(element, fragments).sql().trim();
+    if (body.isEmpty()) {
+      return new BuildResult("(__FOREACH__)", true);
+    }
+    String open = element.getAttribute("open");
+    String close = element.getAttribute("close");
+    return new BuildResult(open + body + close, true);
   }
 
   private static BuildResult ifBuild(Element element, Map<String, Element> fragments) {
@@ -193,7 +203,7 @@ final class MyBatisSqlScriptBuilder {
         .replaceAll("(?is)<set\\b[^>]*>", " SET ")
         .replaceAll("(?is)</set>", " ")
         .replaceAll("(?is)</?trim\\b[^>]*>", " ")
-        .replaceAll("(?is)<foreach\\b[^>]*>.*?</foreach>", " (__FOREACH__) ");
+        .replaceAll("(?is)</?foreach\\b[^>]*>", " ");
   }
 
   private static Document newDocument(String xml) throws Exception {
