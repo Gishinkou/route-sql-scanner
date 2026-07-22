@@ -24,4 +24,12 @@
     </set>
     WHERE id = #{id}
   </update>
+
+  <insert id="insertOrder">
+    <selectKey keyColumn="id" keyProperty="id" order="AFTER" resultType="long">
+      SELECT LAST_INSERT_ID()
+    </selectKey>
+    INSERT INTO orders (tenant_id, order_id, status)
+    VALUES (#{tenantId}, #{orderId}, #{status})
+  </insert>
 </mapper>

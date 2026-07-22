@@ -80,6 +80,7 @@ final class MyBatisSqlScriptBuilder {
         yield new BuildResult(inner.sql(), true);
       }
       case "bind" -> new BuildResult("", true);
+      case "selectKey" -> new BuildResult("", true);
       default -> {
         BuildResult inner = buildChildren(element, fragments);
         yield new BuildResult(inner.sql(), true);

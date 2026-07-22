@@ -80,6 +80,32 @@ public class MyBatisXmlExtractor implements SqlExtractor {
           null
       );
       objects.add(SqlObjects.create(raw, origin, dynamic));
+
+      for (Element selectKey : MyBatisSqlScriptBuilder.childElements(statement)) {
+        if (!"selectKey".equals(selectKey.getTagName())) {
+          continue;
+        }
+        MyBatisSqlScriptBuilder.BuildResult keyBuilt =
+            MyBatisSqlScriptBuilder.buildChildren(selectKey, fragments);
+        String keyRaw = context.normalizer().normalizeMyBatisParameters(keyBuilt.sql());
+        if (keyRaw.isBlank()) {
+          continue;
+        }
+        boolean keyDynamic = keyBuilt.dynamic() || keyRaw.contains("__DYNAMIC__");
+        LineColumn keyLocation = locateSelectKey(xml, location.line());
+        SqlOrigin keyOrigin = new SqlOrigin(
+            SourceKind.MYBATIS_XML,
+            path.toAbsolutePath().normalize(),
+            keyLocation.line(),
+            keyLocation.column(),
+            namespace,
+            statementId + "!selectKey",
+            "SELECT",
+            null,
+            null
+        );
+        objects.add(SqlObjects.create(keyRaw, keyOrigin, keyDynamic));
+      }
     }
     return objects;
   }
@@ -104,9 +130,29 @@ public class MyBatisXmlExtractor implements SqlExtractor {
     if (!matcher.find()) {
       return new LineColumn(1, 1);
     }
+    return offsetToLineColumn(xml, matcher.start());
+  }
+
+  private LineColumn locateSelectKey(String xml, int fromLine) {
+    int offset = 0;
+    int line = 1;
+    while (line < fromLine && offset < xml.length()) {
+      if (xml.charAt(offset) == '\n') {
+        line++;
+      }
+      offset++;
+    }
+    Matcher matcher = Pattern.compile("<selectKey\\b").matcher(xml);
+    if (!matcher.find(offset)) {
+      return new LineColumn(fromLine, 1);
+    }
+    return offsetToLineColumn(xml, matcher.start());
+  }
+
+  private LineColumn offsetToLineColumn(String xml, int end) {
     int line = 1;
     int column = 1;
-    for (int i = 0; i < matcher.start(); i++) {
+    for (int i = 0; i < end; i++) {
       if (xml.charAt(i) == '\n') {
         line++;
         column = 1;

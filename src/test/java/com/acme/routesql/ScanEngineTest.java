@@ -84,6 +84,37 @@ class ScanEngineTest {
     assertFalse(jdbc.has("namespace"), "jdbc origin should not carry namespace");
   }
 
+  @Test
+  void splitsSelectKeyFromInsertStatement() throws Exception {
+    Path fixtureDir = Path.of("src/test/resources/fixtures").toAbsolutePath();
+    ScannerConfig config = new ScannerConfig();
+    config.setProject("acme");
+
+    ScanReport report = new ScanEngine(config).scan(List.of(fixtureDir), List.of(), List.of());
+
+    List<String> inserts = report.sqlObjects().stream()
+        .filter(sql -> "insertOrder".equals(sql.origin().statementId()))
+        .map(sql -> sql.rawSql())
+        .toList();
+    assertEquals(1, inserts.size());
+    String insert = inserts.get(0);
+    assertTrue(insert.toUpperCase().contains("INSERT INTO ORDERS"),
+        "insert body should remain: " + insert);
+    assertFalse(insert.toUpperCase().contains("LAST_INSERT_ID"),
+        "selectKey must not be concatenated into the insert: " + insert);
+
+    List<String> selectKeys = report.sqlObjects().stream()
+        .filter(sql -> "insertOrder!selectKey".equals(sql.origin().statementId()))
+        .map(sql -> sql.rawSql())
+        .toList();
+    assertEquals(1, selectKeys.size());
+    String selectKey = selectKeys.get(0);
+    assertTrue(selectKey.toUpperCase().contains("SELECT LAST_INSERT_ID()"),
+        "selectKey should be emitted as its own SQL: " + selectKey);
+    assertFalse(selectKey.toUpperCase().contains("INSERT INTO"),
+        "selectKey object should not contain the insert body: " + selectKey);
+  }
+
   private static JsonNode originOfType(JsonNode sqls, String sourceType) {
     for (JsonNode sql : sqls) {
       JsonNode origin = sql.get("origin");
