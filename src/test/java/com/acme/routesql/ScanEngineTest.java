@@ -12,17 +12,20 @@ import com.acme.routesql.util.AtFormatter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 class ScanEngineTest {
   @Test
   void scansFixturesIntoCompactInventory() throws Exception {
-    Path fixtureDir = Path.of("src/test/resources/fixtures").toAbsolutePath();
+    Path fixtureDir = Paths.get("src/test/resources/fixtures").toAbsolutePath();
     ScannerConfig config = new ScannerConfig();
     config.setProject("acme");
 
-    ScanReport report = new ScanEngine(config).scan(List.of(fixtureDir), List.of(), List.of());
+    ScanReport report = new ScanEngine(config).scan(Collections.singletonList(fixtureDir), Collections.emptyList(), Collections.emptyList());
 
     assertFalse(report.sqlObjects().isEmpty());
     assertTrue(report.sqlObjects().stream()
@@ -35,11 +38,11 @@ class ScanEngineTest {
 
   @Test
   void rendersCompactJsonV2() throws Exception {
-    Path fixtureDir = Path.of("src/test/resources/fixtures").toAbsolutePath();
+    Path fixtureDir = Paths.get("src/test/resources/fixtures").toAbsolutePath();
     ScannerConfig config = new ScannerConfig();
     config.setProject("acme");
 
-    ScanReport report = new ScanEngine(config).scan(List.of(fixtureDir), List.of(), List.of());
+    ScanReport report = new ScanEngine(config).scan(Collections.singletonList(fixtureDir), Collections.emptyList(), Collections.emptyList());
     String rendered = new CompactInventoryReporter().render(report);
     JsonNode root = new ObjectMapper().readTree(rendered);
 
@@ -62,11 +65,11 @@ class ScanEngineTest {
 
   @Test
   void emitsEnrichedOriginPerSourceType() throws Exception {
-    Path fixtureDir = Path.of("src/test/resources/fixtures").toAbsolutePath();
+    Path fixtureDir = Paths.get("src/test/resources/fixtures").toAbsolutePath();
     ScannerConfig config = new ScannerConfig();
     config.setProject("acme");
 
-    ScanReport report = new ScanEngine(config).scan(List.of(fixtureDir), List.of(), List.of());
+    ScanReport report = new ScanEngine(config).scan(Collections.singletonList(fixtureDir), Collections.emptyList(), Collections.emptyList());
     String rendered = new CompactInventoryReporter(fixtureDir).render(report);
     JsonNode sqls = new ObjectMapper().readTree(rendered).get("sqls");
 
@@ -86,16 +89,16 @@ class ScanEngineTest {
 
   @Test
   void splitsSelectKeyFromInsertStatement() throws Exception {
-    Path fixtureDir = Path.of("src/test/resources/fixtures").toAbsolutePath();
+    Path fixtureDir = Paths.get("src/test/resources/fixtures").toAbsolutePath();
     ScannerConfig config = new ScannerConfig();
     config.setProject("acme");
 
-    ScanReport report = new ScanEngine(config).scan(List.of(fixtureDir), List.of(), List.of());
+    ScanReport report = new ScanEngine(config).scan(Collections.singletonList(fixtureDir), Collections.emptyList(), Collections.emptyList());
 
     List<String> inserts = report.sqlObjects().stream()
         .filter(sql -> "insertOrder".equals(sql.origin().statementId()))
         .map(sql -> sql.rawSql())
-        .toList();
+        .collect(Collectors.toList());
     assertEquals(1, inserts.size());
     String insert = inserts.get(0);
     assertTrue(insert.toUpperCase().contains("INSERT INTO ORDERS"),
@@ -106,7 +109,7 @@ class ScanEngineTest {
     List<String> selectKeys = report.sqlObjects().stream()
         .filter(sql -> "insertOrder!selectKey".equals(sql.origin().statementId()))
         .map(sql -> sql.rawSql())
-        .toList();
+        .collect(Collectors.toList());
     assertEquals(1, selectKeys.size());
     String selectKey = selectKeys.get(0);
     assertTrue(selectKey.toUpperCase().contains("SELECT LAST_INSERT_ID()"),
@@ -127,8 +130,8 @@ class ScanEngineTest {
 
   @Test
   void atFormatterUsesIdeaCopyReferenceStyle() throws Exception {
-    Path fixtureDir = Path.of("src/test/resources/fixtures").toAbsolutePath();
-    ScanReport report = new ScanEngine(new ScannerConfig()).scan(List.of(fixtureDir), List.of(), List.of());
+    Path fixtureDir = Paths.get("src/test/resources/fixtures").toAbsolutePath();
+    ScanReport report = new ScanEngine(new ScannerConfig()).scan(Collections.singletonList(fixtureDir), Collections.emptyList(), Collections.emptyList());
 
     boolean xmlAt = report.sqlObjects().stream()
         .filter(sql -> sql.origin().kind().name().equals("MYBATIS_XML"))

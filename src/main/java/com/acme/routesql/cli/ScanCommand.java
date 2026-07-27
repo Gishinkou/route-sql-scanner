@@ -5,8 +5,10 @@ import com.acme.routesql.core.ScanEngine;
 import com.acme.routesql.model.ScanReport;
 import com.acme.routesql.report.CompactInventoryReporter;
 import com.acme.routesql.report.Reporter;
+import com.acme.routesql.util.Strings;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -66,8 +68,8 @@ public class ScanCommand implements Callable<Integer> {
     if (projectRoot != null) {
       return projectRoot;
     }
-    if (config.getProjectRoot() != null && !config.getProjectRoot().isBlank()) {
-      return Path.of(config.getProjectRoot());
+    if (config.getProjectRoot() != null && !Strings.isBlank(config.getProjectRoot())) {
+      return Paths.get(config.getProjectRoot());
     }
     if (paths.size() == 1 && Files.isDirectory(paths.get(0))) {
       return paths.get(0);

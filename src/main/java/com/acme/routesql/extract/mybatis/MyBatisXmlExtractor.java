@@ -6,11 +6,14 @@ import com.acme.routesql.model.SourceKind;
 import com.acme.routesql.model.SqlObject;
 import com.acme.routesql.model.SqlOrigin;
 import com.acme.routesql.util.SqlObjects;
+import com.acme.routesql.util.Strings;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -22,7 +25,8 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 public class MyBatisXmlExtractor implements SqlExtractor {
-  private static final List<String> STATEMENT_TAGS = List.of("select", "insert", "update", "delete");
+  private static final List<String> STATEMENT_TAGS =
+      Arrays.asList("select", "insert", "update", "delete");
 
   @Override
   public String name() {
@@ -36,9 +40,9 @@ public class MyBatisXmlExtractor implements SqlExtractor {
 
   @Override
   public List<SqlObject> extract(Path path, ExtractionContext context) throws Exception {
-    String xml = Files.readString(path);
+    String xml = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     if (!xml.contains("<mapper")) {
-      return List.of();
+      return Collections.emptyList();
     }
 
     DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -51,7 +55,7 @@ public class MyBatisXmlExtractor implements SqlExtractor {
         .parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
     Element mapper = document.getDocumentElement();
     if (!"mapper".equals(mapper.getTagName())) {
-      return List.of();
+      return Collections.emptyList();
     }
 
     String namespace = mapper.getAttribute("namespace");
@@ -88,7 +92,7 @@ public class MyBatisXmlExtractor implements SqlExtractor {
         MyBatisSqlScriptBuilder.BuildResult keyBuilt =
             MyBatisSqlScriptBuilder.buildChildren(selectKey, fragments);
         String keyRaw = context.normalizer().normalizeMyBatisParameters(keyBuilt.sql());
-        if (keyRaw.isBlank()) {
+        if (Strings.isBlank(keyRaw)) {
           continue;
         }
         boolean keyDynamic = keyBuilt.dynamic() || keyRaw.contains("__DYNAMIC__");
@@ -116,7 +120,7 @@ public class MyBatisXmlExtractor implements SqlExtractor {
       if ("sql".equals(child.getTagName())) {
         String id = child.getAttribute("id");
         fragments.put(id, child);
-        if (namespace != null && !namespace.isBlank()) {
+        if (namespace != null && !Strings.isBlank(namespace)) {
           fragments.put(namespace + "." + id, child);
         }
       }
@@ -163,5 +167,21 @@ public class MyBatisXmlExtractor implements SqlExtractor {
     return new LineColumn(line, column);
   }
 
-  private record LineColumn(int line, int column) {}
+  private static final class LineColumn {
+    private final int line;
+    private final int column;
+
+    LineColumn(int line, int column) {
+      this.line = line;
+      this.column = column;
+    }
+
+    int line() {
+      return line;
+    }
+
+    int column() {
+      return column;
+    }
+  }
 }

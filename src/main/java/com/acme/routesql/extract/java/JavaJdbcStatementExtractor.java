@@ -22,6 +22,7 @@ import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -29,7 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class JavaJdbcStatementExtractor implements SqlExtractor {
-  private static final List<String> SQL_METHODS = List.of(
+  private static final List<String> SQL_METHODS = Arrays.asList(
       "prepareStatement",
       "execute",
       "executeQuery",
@@ -122,19 +123,21 @@ public class JavaJdbcStatementExtractor implements SqlExtractor {
   }
 
   private EvalResult evaluate(Expression expression, Map<String, EvalResult> variables) {
-    if (expression instanceof StringLiteralExpr literal) {
-      return new EvalResult(literal.asString(), false);
+    if (expression instanceof StringLiteralExpr) {
+      return new EvalResult(((StringLiteralExpr) expression).asString(), false);
     }
-    if (expression instanceof TextBlockLiteralExpr textBlock) {
-      return new EvalResult(textBlock.asString(), false);
+    if (expression instanceof TextBlockLiteralExpr) {
+      return new EvalResult(((TextBlockLiteralExpr) expression).asString(), false);
     }
-    if (expression instanceof EnclosedExpr enclosed) {
-      return evaluate(enclosed.getInner(), variables);
+    if (expression instanceof EnclosedExpr) {
+      return evaluate(((EnclosedExpr) expression).getInner(), variables);
     }
-    if (expression instanceof NameExpr name) {
-      return variables.get(name.getNameAsString());
+    if (expression instanceof NameExpr) {
+      return variables.get(((NameExpr) expression).getNameAsString());
     }
-    if (expression instanceof BinaryExpr binary && binary.getOperator() == BinaryExpr.Operator.PLUS) {
+    if (expression instanceof BinaryExpr
+        && ((BinaryExpr) expression).getOperator() == BinaryExpr.Operator.PLUS) {
+      BinaryExpr binary = (BinaryExpr) expression;
       EvalResult left = evaluate(binary.getLeft(), variables);
       EvalResult right = evaluate(binary.getRight(), variables);
       if (left == null && right == null) {
@@ -149,7 +152,7 @@ public class JavaJdbcStatementExtractor implements SqlExtractor {
   }
 
   private boolean looksLikeSql(String sql) {
-    String normalized = sql.stripLeading().toUpperCase(Locale.ROOT);
+    String normalized = stripLeading(sql).toUpperCase(Locale.ROOT);
     return normalized.startsWith("SELECT ")
         || normalized.startsWith("INSERT ")
         || normalized.startsWith("UPDATE ")
@@ -157,5 +160,29 @@ public class JavaJdbcStatementExtractor implements SqlExtractor {
         || normalized.startsWith("WITH ");
   }
 
-  private record EvalResult(String sql, boolean dynamic) {}
+  private static String stripLeading(String value) {
+    int start = 0;
+    while (start < value.length() && Character.isWhitespace(value.charAt(start))) {
+      start++;
+    }
+    return value.substring(start);
+  }
+
+  private static final class EvalResult {
+    private final String sql;
+    private final boolean dynamic;
+
+    EvalResult(String sql, boolean dynamic) {
+      this.sql = sql;
+      this.dynamic = dynamic;
+    }
+
+    String sql() {
+      return sql;
+    }
+
+    boolean dynamic() {
+      return dynamic;
+    }
+  }
 }

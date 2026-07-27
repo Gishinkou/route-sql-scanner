@@ -15,8 +15,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class ScanEngine {
   private final ScannerConfig config;
@@ -24,7 +28,7 @@ public class ScanEngine {
 
   public ScanEngine(ScannerConfig config) {
     this.config = config;
-    this.extractors = List.of(
+    this.extractors = Arrays.asList(
         new MyBatisXmlExtractor(),
         new MyBatisAnnotationExtractor(),
         new JavaJdbcStatementExtractor()
@@ -61,7 +65,7 @@ public class ScanEngine {
           files.add(path);
         }
       } else if (Files.isDirectory(path)) {
-        try (var stream = Files.walk(path)) {
+        try (Stream<Path> stream = Files.walk(path)) {
           stream
               .filter(Files::isRegularFile)
               .filter(candidate -> accepted(candidate, includeMatchers, excludeMatchers))
@@ -83,10 +87,10 @@ public class ScanEngine {
 
   private List<PathMatcher> matchers(List<String> globs) {
     if (globs == null || globs.isEmpty()) {
-      return List.of();
+      return Collections.emptyList();
     }
     return globs.stream()
         .map(glob -> FileSystems.getDefault().getPathMatcher("glob:" + glob))
-        .toList();
+        .collect(Collectors.toList());
   }
 }

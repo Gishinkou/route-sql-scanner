@@ -22,13 +22,16 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
 public class MyBatisAnnotationExtractor implements SqlExtractor {
-  private static final Set<String> SQL_ANNOTATIONS = Set.of("Select", "Insert", "Update", "Delete");
+  private static final Set<String> SQL_ANNOTATIONS =
+      new HashSet<>(Arrays.asList("Select", "Insert", "Update", "Delete"));
 
   @Override
   public String name() {
@@ -53,7 +56,7 @@ public class MyBatisAnnotationExtractor implements SqlExtractor {
           continue;
         }
         Optional<String> sqlValue = sqlValue(annotation);
-        if (sqlValue.isEmpty()) {
+        if (!sqlValue.isPresent()) {
           continue;
         }
 
@@ -89,11 +92,11 @@ public class MyBatisAnnotationExtractor implements SqlExtractor {
   }
 
   private Optional<String> sqlValue(AnnotationExpr annotation) {
-    if (annotation instanceof SingleMemberAnnotationExpr singleMember) {
-      return evaluate(singleMember.getMemberValue());
+    if (annotation instanceof SingleMemberAnnotationExpr) {
+      return evaluate(((SingleMemberAnnotationExpr) annotation).getMemberValue());
     }
-    if (annotation instanceof NormalAnnotationExpr normal) {
-      for (MemberValuePair pair : normal.getPairs()) {
+    if (annotation instanceof NormalAnnotationExpr) {
+      for (MemberValuePair pair : ((NormalAnnotationExpr) annotation).getPairs()) {
         if ("value".equals(pair.getNameAsString())) {
           return evaluate(pair.getValue());
         }
@@ -103,33 +106,35 @@ public class MyBatisAnnotationExtractor implements SqlExtractor {
   }
 
   private Optional<String> evaluate(Expression expression) {
-    if (expression instanceof StringLiteralExpr literal) {
-      return Optional.of(literal.asString());
+    if (expression instanceof StringLiteralExpr) {
+      return Optional.of(((StringLiteralExpr) expression).asString());
     }
-    if (expression instanceof TextBlockLiteralExpr textBlock) {
-      return Optional.of(textBlock.asString());
+    if (expression instanceof TextBlockLiteralExpr) {
+      return Optional.of(((TextBlockLiteralExpr) expression).asString());
     }
-    if (expression instanceof ArrayInitializerExpr array) {
+    if (expression instanceof ArrayInitializerExpr) {
       List<String> parts = new ArrayList<>();
-      for (Expression value : array.getValues()) {
+      for (Expression value : ((ArrayInitializerExpr) expression).getValues()) {
         Optional<String> evaluated = evaluate(value);
-        if (evaluated.isEmpty()) {
+        if (!evaluated.isPresent()) {
           return Optional.empty();
         }
         parts.add(evaluated.get());
       }
       return Optional.of(String.join(" ", parts));
     }
-    if (expression instanceof BinaryExpr binary && binary.getOperator() == BinaryExpr.Operator.PLUS) {
+    if (expression instanceof BinaryExpr
+        && ((BinaryExpr) expression).getOperator() == BinaryExpr.Operator.PLUS) {
+      BinaryExpr binary = (BinaryExpr) expression;
       Optional<String> left = evaluate(binary.getLeft());
       Optional<String> right = evaluate(binary.getRight());
-      if (left.isEmpty() || right.isEmpty()) {
+      if (!left.isPresent() || !right.isPresent()) {
         return Optional.empty();
       }
       return Optional.of(left.get() + right.get());
     }
-    if (expression instanceof EnclosedExpr enclosed) {
-      return evaluate(enclosed.getInner());
+    if (expression instanceof EnclosedExpr) {
+      return evaluate(((EnclosedExpr) expression).getInner());
     }
     if (expression instanceof NameExpr) {
       return Optional.empty();

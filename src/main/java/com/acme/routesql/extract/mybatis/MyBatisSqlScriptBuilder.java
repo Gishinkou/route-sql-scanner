@@ -1,8 +1,10 @@
 package com.acme.routesql.extract.mybatis;
 
+import com.acme.routesql.util.Strings;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -38,7 +40,7 @@ final class MyBatisSqlScriptBuilder {
           : "<script>" + trimmed + "</script>";
       Document document = newDocument(wrapped);
       Element script = document.getDocumentElement();
-      BuildResult built = buildChildren(script, Map.of());
+      BuildResult built = buildChildren(script, Collections.emptyMap());
       return new BuildResult(built.sql(), true);
     } catch (Exception ignored) {
       return new BuildResult(normalizeSpace(stripDynamicTags(sql)), true);
@@ -67,25 +69,36 @@ final class MyBatisSqlScriptBuilder {
 
     Element element = (Element) node;
     String tag = element.getTagName();
-    return switch (tag) {
-      case "include" -> includeBuild(element, fragments);
-      case "where" -> keywordBlock("WHERE", buildChildren(element, fragments), true, true);
-      case "set" -> keywordBlock("SET", buildChildren(element, fragments), true, false);
-      case "trim" -> trimBuild(element, fragments);
-      case "foreach" -> foreachBuild(element, fragments);
-      case "if" -> ifBuild(element, fragments);
-      case "choose" -> chooseBuild(element, fragments);
-      case "when", "otherwise", "script" -> {
+    switch (tag) {
+      case "include":
+        return includeBuild(element, fragments);
+      case "where":
+        return keywordBlock("WHERE", buildChildren(element, fragments), true, true);
+      case "set":
+        return keywordBlock("SET", buildChildren(element, fragments), true, false);
+      case "trim":
+        return trimBuild(element, fragments);
+      case "foreach":
+        return foreachBuild(element, fragments);
+      case "if":
+        return ifBuild(element, fragments);
+      case "choose":
+        return chooseBuild(element, fragments);
+      case "when":
+      case "otherwise":
+      case "script": {
         BuildResult inner = buildChildren(element, fragments);
-        yield new BuildResult(inner.sql(), true);
+        return new BuildResult(inner.sql(), true);
       }
-      case "bind" -> new BuildResult("", true);
-      case "selectKey" -> new BuildResult("", true);
-      default -> {
+      case "bind":
+        return new BuildResult("", true);
+      case "selectKey":
+        return new BuildResult("", true);
+      default: {
         BuildResult inner = buildChildren(element, fragments);
-        yield new BuildResult(inner.sql(), true);
+        return new BuildResult(inner.sql(), true);
       }
-    };
+    }
   }
 
   private static BuildResult includeBuild(Element element, Map<String, Element> fragments) {
@@ -138,19 +151,19 @@ final class MyBatisSqlScriptBuilder {
     BuildResult children = buildChildren(element, fragments);
     String body = children.sql();
     String prefixOverrides = element.getAttribute("prefixOverrides");
-    if (!prefixOverrides.isBlank()) {
+    if (!Strings.isBlank(prefixOverrides)) {
       for (String token : prefixOverrides.split("\\|")) {
         body = body.replaceFirst("(?i)^\\s*" + Pattern.quote(token.trim()) + "\\b", " ");
       }
     }
     String suffixOverrides = element.getAttribute("suffixOverrides");
-    if (!suffixOverrides.isBlank() && suffixOverrides.contains(",")) {
+    if (!Strings.isBlank(suffixOverrides) && suffixOverrides.contains(",")) {
       body = stripTrailingComma(body);
     }
     String prefix = element.getAttribute("prefix");
     String suffix = element.getAttribute("suffix");
     body = body.trim();
-    if (body.isBlank()) {
+    if (Strings.isBlank(body)) {
       return new BuildResult("", true);
     }
     return new BuildResult((prefix + " " + body + " " + suffix).trim(), true);
@@ -163,14 +176,14 @@ final class MyBatisSqlScriptBuilder {
       boolean stripLeadingBoolean
   ) {
     String sql = stripLeadingBoolean ? stripLeadingBoolean(body.sql()) : stripTrailingComma(body.sql());
-    if (sql == null || sql.isBlank()) {
+    if (Strings.isBlank(sql)) {
       return new BuildResult("", dynamic || body.dynamic());
     }
     return new BuildResult(keyword + " " + sql, dynamic || body.dynamic());
   }
 
   private static void appendSql(StringBuilder buffer, String right) {
-    if (right == null || right.isBlank()) {
+    if (Strings.isBlank(right)) {
       return;
     }
     if (buffer.length() > 0 && buffer.charAt(buffer.length() - 1) != ' ') {
@@ -218,5 +231,21 @@ final class MyBatisSqlScriptBuilder {
         .parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
   }
 
-  record BuildResult(String sql, boolean dynamic) {}
+  static final class BuildResult {
+    private final String sql;
+    private final boolean dynamic;
+
+    BuildResult(String sql, boolean dynamic) {
+      this.sql = sql;
+      this.dynamic = dynamic;
+    }
+
+    String sql() {
+      return sql;
+    }
+
+    boolean dynamic() {
+      return dynamic;
+    }
+  }
 }

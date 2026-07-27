@@ -6,6 +6,7 @@ import com.acme.routesql.model.SqlObject;
 import com.acme.routesql.model.SqlOrigin;
 import com.acme.routesql.util.AtFormatter;
 import com.acme.routesql.util.OriginPaths;
+import com.acme.routesql.util.Strings;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import java.nio.file.Path;
@@ -33,7 +34,7 @@ public class CompactInventoryReporter implements Reporter {
   public String render(ScanReport report) throws Exception {
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("v", SCHEMA_VERSION);
-    if (report.project() != null && !report.project().isBlank()) {
+    if (report.project() != null && !Strings.isBlank(report.project())) {
       out.put("project", report.project());
     }
     out.put("scannedAt", LocalDateTime.now().toString());
@@ -67,39 +68,43 @@ public class CompactInventoryReporter implements Reporter {
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("sourceType", sourceType);
     switch (origin.kind()) {
-      case MYBATIS_XML -> {
+      case MYBATIS_XML:
         putIfPresent(out, "namespace", origin.namespace());
         putIfPresent(out, "statementId", origin.statementId());
         putIfPresent(out, "resourcePath", OriginPaths.resourcePath(sourcePath));
         putIfPresent(out, "sourcePath", sourcePath);
-      }
-      case MYBATIS_ANNOTATION -> {
+        break;
+      case MYBATIS_ANNOTATION:
         putIfPresent(out, "namespace", origin.namespace());
         putIfPresent(out, "statementId", origin.statementId());
         putIfPresent(out, "sourcePath", sourcePath);
-      }
-      case JAVA_JDBC -> {
+        break;
+      case JAVA_JDBC:
         putIfPresent(out, "enclosingClass", origin.className());
         putIfPresent(out, "sourcePath", sourcePath);
-      }
-      default -> {
+        break;
+      default:
         // unreachable: sourceType(...) already filtered unknown kinds
-      }
+        break;
     }
     return out;
   }
 
   private static String sourceType(SourceKind kind) {
-    return switch (kind) {
-      case MYBATIS_XML -> "mybatis_xml";
-      case MYBATIS_ANNOTATION -> "mybatis_annotation";
-      case JAVA_JDBC -> "java_literal_sql";
-      default -> null;
-    };
+    switch (kind) {
+      case MYBATIS_XML:
+        return "mybatis_xml";
+      case MYBATIS_ANNOTATION:
+        return "mybatis_annotation";
+      case JAVA_JDBC:
+        return "java_literal_sql";
+      default:
+        return null;
+    }
   }
 
   private static void putIfPresent(Map<String, Object> map, String key, String value) {
-    if (value != null && !value.isBlank()) {
+    if (value != null && !Strings.isBlank(value)) {
       map.put(key, value);
     }
   }

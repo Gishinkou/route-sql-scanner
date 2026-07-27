@@ -1,10 +1,11 @@
 package com.acme.routesql.util;
 
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 public final class OriginPaths {
-  private static final List<String> CLASSPATH_ANCHORS = List.of(
+  private static final List<String> CLASSPATH_ANCHORS = Arrays.asList(
       "src/main/resources/",
       "src/test/resources/",
       "src/main/java/",
@@ -31,7 +32,7 @@ public final class OriginPaths {
    * anchor is present. Prefers sourcePath as input so it works relative to the project root.
    */
   public static String resourcePath(String sourcePath) {
-    if (sourcePath == null || sourcePath.isBlank()) {
+    if (Strings.isBlank(sourcePath)) {
       return null;
     }
     String slashed = toSlash(sourcePath);
