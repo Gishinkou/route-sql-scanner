@@ -5,6 +5,7 @@ import com.acme.routesql.core.ScanEngine;
 import com.acme.routesql.model.ScanReport;
 import com.acme.routesql.report.CompactInventoryReporter;
 import com.acme.routesql.report.Reporter;
+import com.acme.routesql.util.SqlKeyAllowlist;
 import com.acme.routesql.util.Strings;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,7 +16,7 @@ import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "scan", description = "Scan MyBatis XML and Java JDBC SQL.")
+@Command(name = "scan", description = "Scan MyBatis/iBATIS XML and Java JDBC SQL.")
 public class ScanCommand implements Callable<Integer> {
   @Option(names = "--help", usageHelp = true, description = "Show this help message and exit.")
   boolean help;
@@ -31,6 +32,10 @@ public class ScanCommand implements Callable<Integer> {
           + "Defaults to the sole scan --path when it is a directory.")
   private Path projectRoot;
 
+  @Option(names = "--sql-key-allowlist",
+      description = "UTF-8 JSON array containing emitted sqlKey strings.")
+  private Path sqlKeyAllowlist;
+
   @Option(names = "--output", description = "Output file. Defaults to stdout.")
   private Path output;
 
@@ -45,13 +50,15 @@ public class ScanCommand implements Callable<Integer> {
     try {
       ScannerConfig config = ScannerConfig.load(configPath);
       ScanReport report = new ScanEngine(config).scan(paths, includes, excludes);
-      Reporter reporter = new CompactInventoryReporter(resolveProjectRoot(config));
+      Path resolvedProjectRoot = resolveProjectRoot(config);
+      report = SqlKeyAllowlist.filter(report, resolvedProjectRoot, sqlKeyAllowlist);
+      Reporter reporter = new CompactInventoryReporter(resolvedProjectRoot);
       byte[] rendered = reporter.renderBytes(report);
       if (output == null) {
         System.out.write(rendered);
       } else {
         Path parent = output.toAbsolutePath().getParent();
-        if (parent != null) {
+        if (parent != null && !Files.isDirectory(parent)) {
           Files.createDirectories(parent);
         }
         Files.write(output, rendered);

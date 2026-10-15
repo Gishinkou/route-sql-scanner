@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 public class MyBatisXmlExtractor implements SqlExtractor {
   private static final List<String> STATEMENT_TAGS =
@@ -38,48 +39,83 @@ public class MyBatisXmlExtractor implements SqlExtractor {
     return path.getFileName().toString().endsWith(".xml");
   }
 
+  public static Map<String, Element> collectGlobalFragments(List<Path> files) {
+    Map<String, Element> global = new HashMap<>();
+    for (Path file : files) {
+      if (!file.getFileName().toString().endsWith(".xml")) {
+        continue;
+      }
+      try {
+        String xml = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        if (!xml.contains("<mapper") && !xml.contains("<sqlMap")) {
+          continue;
+        }
+        Document doc = parseDocument(xml);
+        if (IBatisSqlMapNormalizer.isIBatis(doc)) {
+          doc = IBatisSqlMapNormalizer.normalize(doc, file);
+        }
+        Element mapper = doc.getDocumentElement();
+        if (!"mapper".equals(mapper.getTagName())) {
+          continue;
+        }
+        String namespace = mapper.getAttribute("namespace");
+        for (Element child : MyBatisSqlScriptBuilder.childElements(mapper)) {
+          if ("sql".equals(child.getTagName())) {
+            String id = child.getAttribute("id");
+            global.putIfAbsent(id, child);
+            if (namespace != null && !namespace.isEmpty()) {
+              global.putIfAbsent(namespace + "." + id, child);
+            }
+          }
+        }
+      } catch (Exception ignored) {
+        // skip unparseable files
+      }
+    }
+    return global;
+  }
+
   @Override
   public List<SqlObject> extract(Path path, ExtractionContext context) throws Exception {
     String xml = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
-    if (!xml.contains("<mapper")) {
+    if (!xml.contains("<mapper") && !xml.contains("<sqlMap")) {
       return Collections.emptyList();
     }
 
-    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-    factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
-    factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-    factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-    factory.setNamespaceAware(false);
-    factory.setIgnoringComments(true);
-    Document document = factory.newDocumentBuilder()
-        .parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+    Document document = parseDocument(xml);
+    boolean ibatis = IBatisSqlMapNormalizer.isIBatis(document);
+    if (ibatis) {
+      document = IBatisSqlMapNormalizer.normalize(document, path);
+    }
     Element mapper = document.getDocumentElement();
     if (!"mapper".equals(mapper.getTagName())) {
       return Collections.emptyList();
     }
 
     String namespace = mapper.getAttribute("namespace");
-    Map<String, Element> fragments = collectFragments(mapper, namespace);
+    Map<String, Element> fragments = collectFragments(mapper, namespace, context);
     List<SqlObject> objects = new ArrayList<>();
     for (Element statement : MyBatisSqlScriptBuilder.childElements(mapper)) {
       String tagName = statement.getTagName();
-      if (!STATEMENT_TAGS.contains(tagName)) {
+      if (!STATEMENT_TAGS.contains(tagName) && !"statement".equals(tagName)) {
         continue;
       }
       String statementId = statement.getAttribute("id");
       MyBatisSqlScriptBuilder.BuildResult built =
           MyBatisSqlScriptBuilder.buildChildren(statement, fragments);
       String raw = context.normalizer().normalizeMyBatisParameters(built.sql());
-      boolean dynamic = built.dynamic() || raw.contains("__DYNAMIC__");
+      boolean dynamic = built.dynamic() || raw.contains("__DYNAMIC__")
+          || raw.contains("__IBATIS_UNKNOWN_TAG_");
+      String commandType = "statement".equals(tagName) ? inferCommandType(raw) : tagName.toUpperCase(Locale.ROOT);
       LineColumn location = locate(xml, tagName, statementId);
       SqlOrigin origin = new SqlOrigin(
-          SourceKind.MYBATIS_XML,
+          ibatis ? SourceKind.IBATIS_XML : SourceKind.MYBATIS_XML,
           path.toAbsolutePath().normalize(),
           location.line(),
           location.column(),
           namespace,
           statementId,
-          tagName.toUpperCase(Locale.ROOT),
+          commandType,
           null,
           null
       );
@@ -98,7 +134,7 @@ public class MyBatisXmlExtractor implements SqlExtractor {
         boolean keyDynamic = keyBuilt.dynamic() || keyRaw.contains("__DYNAMIC__");
         LineColumn keyLocation = locateSelectKey(xml, location.line());
         SqlOrigin keyOrigin = new SqlOrigin(
-            SourceKind.MYBATIS_XML,
+            ibatis ? SourceKind.IBATIS_XML : SourceKind.MYBATIS_XML,
             path.toAbsolutePath().normalize(),
             keyLocation.line(),
             keyLocation.column(),
@@ -114,8 +150,19 @@ public class MyBatisXmlExtractor implements SqlExtractor {
     return objects;
   }
 
-  private Map<String, Element> collectFragments(Element mapper, String namespace) {
-    Map<String, Element> fragments = new HashMap<>();
+  private static Document parseDocument(String xml) throws Exception {
+    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+    factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+    factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+    factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+    factory.setNamespaceAware(false);
+    factory.setIgnoringComments(true);
+    return factory.newDocumentBuilder()
+        .parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+  }
+
+  private Map<String, Element> collectFragments(Element mapper, String namespace, ExtractionContext context) {
+    Map<String, Element> fragments = new HashMap<>(context.globalFragments());
     for (Element child : MyBatisSqlScriptBuilder.childElements(mapper)) {
       if ("sql".equals(child.getTagName())) {
         String id = child.getAttribute("id");
@@ -126,6 +173,11 @@ public class MyBatisXmlExtractor implements SqlExtractor {
       }
     }
     return fragments;
+  }
+
+  private String inferCommandType(String sql) {
+    Matcher matcher = Pattern.compile("(?i)^\\s*(SELECT|INSERT|UPDATE|DELETE)\\b").matcher(sql);
+    return matcher.find() ? matcher.group(1).toUpperCase(Locale.ROOT) : "UNKNOWN";
   }
 
   private LineColumn locate(String xml, String tagName, String id) {

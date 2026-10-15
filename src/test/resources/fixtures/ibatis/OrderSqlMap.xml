@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN" "http://www.ibatis.com/dtd/sql-map-2.dtd">
+<sqlMap namespace="legacy.orders">
+  <typeAlias alias="Order" type="legacy.Order">TYPE_ALIAS_MUST_NOT_BE_SQL</typeAlias>
+  <resultMap id="orderResult" class="Order">
+    RESULT_MAP_MUST_NOT_BE_SQL
+    <result property="id" column="id">RESULT_MUST_NOT_BE_SQL</result>
+  </resultMap>
+  <parameterMap id="orderParams" class="java.util.Map">PARAMETER_MAP_MUST_NOT_BE_SQL</parameterMap>
+  <cacheModel id="orderCache" type="LRU">CACHE_MODEL_MUST_NOT_BE_SQL</cacheModel>
+  <sql id="columns">id, user_id, status</sql>
+  <sql id="nested"><include refid="legacy.shared.table"/></sql>
+
+  <select id="find">
+    SELECT <include refid="columns"/> FROM <include refid="nested"/>
+    <dynamic prepend="WHERE">
+      <isNotNull property="userId" prepend="AND">user_id = #userId,jdbcType=BIGINT#</isNotNull>
+      <isEqual property="status" compareValue="OPEN" prepend="AND">status = #status#</isEqual>
+      <isNotEmpty property="ids" prepend="AND">
+        id IN <iterate property="ids" open="(" close=")" conjunction=",">#ids[]#</iterate>
+      </isNotEmpty>
+      <isPropertyAvailable property="tenant" prepend="AND">tenant = $tenant$</isPropertyAvailable>
+    </dynamic>
+  </select>
+
+  <insert id="create">INSERT INTO orders(id, status) VALUES (#id#, #status#)</insert>
+  <update id="change"><dynamic prepend="UPDATE orders SET"><isNotNull property="status">status=#status#</isNotNull></dynamic> WHERE id=#id#</update>
+  <delete id="remove">DELETE FROM orders WHERE id=#id#</delete>
+  <statement id="generic">SELECT id FROM orders WHERE id=#id#</statement>
+  <select id="prependComma">SELECT * FROM orders <dynamic prepend="WHERE"><isGreaterThan property="id" compareValue="0" prepend=",">id=#id#</isGreaterThan><isNotEmpty property="status" prepend="AND">status=#status#</isNotEmpty></dynamic></select>
+  <select id="unknown">SELECT * FROM orders <legacyCondition>WHERE flag=1</legacyCondition></select>
+  <select id="missing">SELECT * FROM <include refid="does.not.exist"/></select>
+  <procedure id="callLegacy">{call legacy_proc(#id#)}</procedure>
+</sqlMap>

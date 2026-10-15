@@ -5,6 +5,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -18,11 +19,16 @@ final class MyBatisSqlScriptBuilder {
   private MyBatisSqlScriptBuilder() {}
 
   static BuildResult buildChildren(Element element, Map<String, Element> fragments) {
+    return buildChildren(element, fragments, new HashSet<String>());
+  }
+
+  private static BuildResult buildChildren(
+      Element element, Map<String, Element> fragments, java.util.Set<String> includeStack) {
     StringBuilder sql = new StringBuilder();
     boolean dynamic = false;
     NodeList nodes = element.getChildNodes();
     for (int i = 0; i < nodes.getLength(); i++) {
-      BuildResult part = buildNode(nodes.item(i), fragments);
+      BuildResult part = buildNode(nodes.item(i), fragments, includeStack);
       appendSql(sql, part.sql());
       dynamic |= part.dynamic();
     }
@@ -59,7 +65,8 @@ final class MyBatisSqlScriptBuilder {
     return elements;
   }
 
-  private static BuildResult buildNode(Node node, Map<String, Element> fragments) {
+  private static BuildResult buildNode(
+      Node node, Map<String, Element> fragments, java.util.Set<String> includeStack) {
     if (node.getNodeType() == Node.TEXT_NODE || node.getNodeType() == Node.CDATA_SECTION_NODE) {
       return new BuildResult(node.getTextContent(), false);
     }
@@ -71,23 +78,23 @@ final class MyBatisSqlScriptBuilder {
     String tag = element.getTagName();
     switch (tag) {
       case "include":
-        return includeBuild(element, fragments);
+        return includeBuild(element, fragments, includeStack);
       case "where":
-        return keywordBlock("WHERE", buildChildren(element, fragments), true, true);
+        return keywordBlock("WHERE", buildChildren(element, fragments, includeStack), true, true);
       case "set":
-        return keywordBlock("SET", buildChildren(element, fragments), true, false);
+        return keywordBlock("SET", buildChildren(element, fragments, includeStack), true, false);
       case "trim":
-        return trimBuild(element, fragments);
+        return trimBuild(element, fragments, includeStack);
       case "foreach":
-        return foreachBuild(element, fragments);
+        return foreachBuild(element, fragments, includeStack);
       case "if":
-        return ifBuild(element, fragments);
+        return ifBuild(element, fragments, includeStack);
       case "choose":
-        return chooseBuild(element, fragments);
+        return chooseBuild(element, fragments, includeStack);
       case "when":
       case "otherwise":
       case "script": {
-        BuildResult inner = buildChildren(element, fragments);
+        BuildResult inner = buildChildren(element, fragments, includeStack);
         return new BuildResult(inner.sql(), true);
       }
       case "bind":
@@ -95,22 +102,29 @@ final class MyBatisSqlScriptBuilder {
       case "selectKey":
         return new BuildResult("", true);
       default: {
-        BuildResult inner = buildChildren(element, fragments);
+        BuildResult inner = buildChildren(element, fragments, includeStack);
         return new BuildResult(inner.sql(), true);
       }
     }
   }
 
-  private static BuildResult includeBuild(Element element, Map<String, Element> fragments) {
-    Element fragment = fragments.get(element.getAttribute("refid"));
+  private static BuildResult includeBuild(Element element, Map<String, Element> fragments, java.util.Set<String> includeStack) {
+    String refid = element.getAttribute("refid");
+    Element fragment = fragments.get(refid);
     if (fragment == null) {
       return new BuildResult(" __MISSING_INCLUDE__ ", true);
     }
-    return buildChildren(fragment, fragments);
+    if (!includeStack.add(refid)) {
+      System.err.println("warn: cyclic SQL include skipped: " + refid);
+      return new BuildResult(" __CYCLIC_INCLUDE__ ", true);
+    }
+    BuildResult result = buildChildren(fragment, fragments, includeStack);
+    includeStack.remove(refid);
+    return result;
   }
 
-  private static BuildResult foreachBuild(Element element, Map<String, Element> fragments) {
-    String body = buildChildren(element, fragments).sql().trim();
+  private static BuildResult foreachBuild(Element element, Map<String, Element> fragments, java.util.Set<String> includeStack) {
+    String body = buildChildren(element, fragments, includeStack).sql().trim();
     if (body.isEmpty()) {
       return new BuildResult("(__FOREACH__)", true);
     }
@@ -119,8 +133,8 @@ final class MyBatisSqlScriptBuilder {
     return new BuildResult(open + body + close, true);
   }
 
-  private static BuildResult ifBuild(Element element, Map<String, Element> fragments) {
-    BuildResult body = buildChildren(element, fragments);
+  private static BuildResult ifBuild(Element element, Map<String, Element> fragments, java.util.Set<String> includeStack) {
+    BuildResult body = buildChildren(element, fragments, includeStack);
     String inner = body.sql().trim();
     if (inner.isEmpty()) {
       return new BuildResult("", true);
@@ -128,32 +142,32 @@ final class MyBatisSqlScriptBuilder {
     return new BuildResult("/*?if*/ " + inner + " /*?endif*/", true);
   }
 
-  private static BuildResult chooseBuild(Element element, Map<String, Element> fragments) {
+  private static BuildResult chooseBuild(Element element, Map<String, Element> fragments, java.util.Set<String> includeStack) {
     List<String> branches = new ArrayList<>();
     for (Element child : childElements(element)) {
       String tag = child.getTagName();
       if (!"when".equals(tag) && !"otherwise".equals(tag)) {
         continue;
       }
-      String branch = buildChildren(child, fragments).sql().trim();
+      String branch = buildChildren(child, fragments, includeStack).sql().trim();
       if (!branch.isEmpty()) {
         branches.add("/*?branch*/ " + branch + " /*?endbranch*/");
       }
     }
     if (branches.isEmpty()) {
-      BuildResult inner = buildChildren(element, fragments);
+      BuildResult inner = buildChildren(element, fragments, includeStack);
       return new BuildResult(inner.sql(), true);
     }
     return new BuildResult("/*?choose*/ " + String.join(" /*?or*/ ", branches) + " /*?endchoose*/", true);
   }
 
-  private static BuildResult trimBuild(Element element, Map<String, Element> fragments) {
-    BuildResult children = buildChildren(element, fragments);
+  private static BuildResult trimBuild(Element element, Map<String, Element> fragments, java.util.Set<String> includeStack) {
+    BuildResult children = buildChildren(element, fragments, includeStack);
     String body = children.sql();
     String prefixOverrides = element.getAttribute("prefixOverrides");
     if (!Strings.isBlank(prefixOverrides)) {
       for (String token : prefixOverrides.split("\\|")) {
-        body = body.replaceFirst("(?i)^\\s*" + Pattern.quote(token.trim()) + "\\b", " ");
+        body = stripLeadingDynamicPrefix(body, token.trim());
       }
     }
     String suffixOverrides = element.getAttribute("suffixOverrides");
@@ -194,6 +208,19 @@ final class MyBatisSqlScriptBuilder {
 
   private static String normalizeSpace(String sql) {
     return sql == null ? "" : sql.replaceAll("\\s+", " ").trim();
+  }
+
+  private static String stripLeadingDynamicPrefix(String sql, String token) {
+    if (Strings.isBlank(sql) || Strings.isBlank(token)) {
+      return sql;
+    }
+    String boundary = token.matches("[A-Za-z0-9_]+") ? "\\b" : "";
+    String withMarker = sql.replaceFirst(
+        "(?i)^\\s*(/\\*\\?if\\*/\\s*)" + Pattern.quote(token) + boundary, "$1");
+    if (!withMarker.equals(sql)) {
+      return withMarker;
+    }
+    return sql.replaceFirst("(?i)^\\s*" + Pattern.quote(token) + boundary, " ");
   }
 
   private static String stripLeadingBoolean(String sql) {

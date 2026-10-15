@@ -6,6 +6,7 @@ import com.acme.routesql.model.SqlObject;
 import com.acme.routesql.model.SqlOrigin;
 import com.acme.routesql.util.AtFormatter;
 import com.acme.routesql.util.OriginPaths;
+import com.acme.routesql.util.SqlKey;
 import com.acme.routesql.util.Strings;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -41,6 +42,8 @@ public class CompactInventoryReporter implements Reporter {
     List<Map<String, Object>> sqls = new ArrayList<>();
     for (SqlObject so : report.sqlObjects()) {
       Map<String, Object> row = new LinkedHashMap<>();
+      row.put("sqlKey", SqlKey.of(projectRoot, so));
+      row.put("sourceStatementId", SqlKey.sourceStatementId(projectRoot, so));
       row.put("at", AtFormatter.format(so.origin()));
       row.put("sql", so.rawSql());
       if (so.dynamic()) {
@@ -71,6 +74,16 @@ public class CompactInventoryReporter implements Reporter {
       case MYBATIS_XML:
         putIfPresent(out, "namespace", origin.namespace());
         putIfPresent(out, "statementId", origin.statementId());
+        out.put("framework", "mybatis");
+        putIfPresent(out, "resourcePath", OriginPaths.resourcePath(sourcePath));
+        putIfPresent(out, "sourcePath", sourcePath);
+        break;
+      case IBATIS_XML:
+        putIfPresent(out, "namespace", origin.namespace());
+        putIfPresent(out, "statementId", origin.statementId());
+        out.put("framework", "ibatis");
+        out.put("frameworkVersion", "2");
+        out.put("normalizerVersion", "1");
         putIfPresent(out, "resourcePath", OriginPaths.resourcePath(sourcePath));
         putIfPresent(out, "sourcePath", sourcePath);
         break;
@@ -93,6 +106,7 @@ public class CompactInventoryReporter implements Reporter {
   private static String sourceType(SourceKind kind) {
     switch (kind) {
       case MYBATIS_XML:
+      case IBATIS_XML:
         return "mybatis_xml";
       case MYBATIS_ANNOTATION:
         return "mybatis_annotation";

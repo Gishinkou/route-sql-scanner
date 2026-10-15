@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN" "http://www.ibatis.com/dtd/sql-map-2.dtd">
+<sqlMap namespace="legacy.dynamic">
+  <update id="dynamicWithoutPrepend">
+    UPDATE departments SET modified=now()
+    <dynamic><isNotNull property="code" prepend=",">code=#code#</isNotNull></dynamic>
+    WHERE id=#id#
+  </update>
+  <update id="dynamicWithEmptyPrepend">
+    UPDATE departments SET modified=now()
+    <dynamic prepend=""><isNotNull property="name" prepend=",">name=#name#</isNotNull></dynamic>
+    WHERE id=#id#
+  </update>
+  <select id="dynamicAfterStaticWhere">
+    SELECT id FROM departments WHERE 1=1
+    <dynamic><isNotNull property="id" prepend="AND">id=#id#</isNotNull></dynamic>
+  </select>
+  <update id="dynamicWithSet">
+    UPDATE departments
+    <dynamic prepend="SET">
+      <isNotNull property="code" prepend=",">code=#code#</isNotNull>
+      <isNotNull property="name" prepend=",">name=#name#</isNotNull>
+    </dynamic>
+    WHERE id=#id#
+  </update>
+
+  <insert id="complementaryValues">
+    INSERT INTO pair_values(id, created, modified) VALUES (#id#,
+    <isNull property="created">now(),</isNull>
+    <!-- The two conditions are exact complements, not independent optional values. -->
+    <isNotNull property="created">#created#,</isNotNull>
+    now())
+  </insert>
+  <insert id="complementaryValuesReversed">
+    INSERT INTO pair_values_reversed(id, created, modified) VALUES (#id#,
+    <isNotNull property="created">#created#,</isNotNull>
+    <isNull property="created">now(),</isNull>
+    now())
+  </insert>
+  <update id="complementaryIterateValues">
+    <isNotEmpty property="batchList">
+      INSERT INTO batch_values(id, created, modified) VALUES
+      <iterate property="batchList" conjunction=",">
+        <isNotNull property="batchList[]">
+          ( #batchList[].id#,
+          <isNull property="batchList[].created">now(),</isNull>
+          <isNotNull property="batchList[].created">#batchList[].created#,</isNotNull>
+          now() )
+        </isNotNull>
+      </iterate>
+    </isNotEmpty>
+  </update>
+
+  <insert id="differentProperties">
+    INSERT INTO independent_values(created, modified) VALUES (
+    <isNull property="created">now(),</isNull>
+    <isNotNull property="modified">#modified#</isNotNull>)
+  </insert>
+  <insert id="sameNullCondition">
+    INSERT INTO repeated_null_values(created, modified) VALUES (
+    <isNull property="created">now(),</isNull>
+    <isNull property="created">now()</isNull>)
+  </insert>
+  <insert id="nonAdjacentPair">
+    INSERT INTO non_adjacent_values(id, created, modified) VALUES (
+    <isNull property="created">now(),</isNull>
+    #id#,
+    <isNotNull property="created">#created#,</isNotNull>
+    now())
+  </insert>
+  <insert id="correlatedColumnValues">
+    INSERT INTO correlated_values(id,
+    <isNull property="created">created_default,</isNull>
+    <isNotNull property="created">created_explicit,</isNotNull>
+    modified) VALUES (#id#,
+    <isNull property="created">now(),</isNull>
+    <isNotNull property="created">#created#,</isNotNull>
+    now())
+  </insert>
+  <sql id="conditionalColumn"><isNotNull property="created">created,</isNotNull></sql>
+  <insert id="pairWithInclude">
+    INSERT INTO included_values(id, <include refid="conditionalColumn"/> modified) VALUES (#id#,
+    <isNull property="created">now(),</isNull>
+    <isNotNull property="created">#created#,</isNotNull>
+    now())
+  </insert>
+  <insert id="pairWithOpaqueCondition">
+    INSERT INTO opaque_values(id, <if test="created != null">created,</if> modified) VALUES (#id#,
+    <isNull property="created">now(),</isNull>
+    <isNotNull property="created">#created#,</isNotNull>
+    now())
+  </insert>
+  <update id="pairWithPrepend">
+    UPDATE prepended_values SET modified=now()
+    <isNull property="created" prepend=",">created=now()</isNull>
+    <isNotNull property="created" prepend=",">created=#created#</isNotNull>
+    WHERE id=#id#
+  </update>
+  <insert id="pairWithNestedBody">
+    INSERT INTO nested_values(id, created, modified) VALUES (#id#,
+    <isNull property="created"><isNotNull property="id">now(),</isNotNull></isNull>
+    <isNotNull property="created">#created#,</isNotNull>
+    now())
+  </insert>
+  <insert id="pairWithEmptyBody">
+    INSERT INTO empty_body_values(id, created) VALUES (#id#
+    <isNull property="created"> </isNull>
+    <isNotNull property="created">, #created#</isNotNull>)
+  </insert>
+</sqlMap>

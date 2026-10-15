@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.acme.routesql.cli.ScanCommand;
 import com.acme.routesql.config.ScannerConfig;
 import com.acme.routesql.core.ScanEngine;
 import com.acme.routesql.model.ScanReport;
@@ -11,12 +12,14 @@ import com.acme.routesql.report.CompactInventoryReporter;
 import com.acme.routesql.util.AtFormatter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import picocli.CommandLine;
 
 class ScanEngineTest {
   @Test
@@ -73,9 +76,10 @@ class ScanEngineTest {
     String rendered = new CompactInventoryReporter(fixtureDir).render(report);
     JsonNode sqls = new ObjectMapper().readTree(rendered).get("sqls");
 
-    JsonNode xml = originOfType(sqls, "mybatis_xml");
+    JsonNode xml = originOfType(sqls, "mybatis_xml", "mybatis");
     assertTrue(xml.has("namespace"), "xml origin should carry namespace");
     assertTrue(xml.has("statementId"), "xml origin should carry statementId");
+    assertEquals("mybatis", xml.path("framework").asText());
 
     JsonNode annotation = originOfType(sqls, "mybatis_annotation");
     assertTrue(annotation.has("namespace"), "annotation origin should carry namespace");
@@ -118,14 +122,39 @@ class ScanEngineTest {
         "selectKey object should not contain the insert body: " + selectKey);
   }
 
+  @Test
+  void writesOutputWhenParentDirectoryAlreadyExists() throws Exception {
+    Path fixture = Paths.get("src/test/resources/fixtures/OrderMapper.xml").toAbsolutePath();
+    Path output = Files.createTempFile("route-sql-scanner-existing-parent-", ".json");
+    try {
+      ScanCommand command = new ScanCommand();
+      CommandLine cli = new CommandLine(command);
+      int exitCode = cli.execute(
+          "--path", fixture.toString(),
+          "--output", output.toString());
+
+      assertEquals(0, exitCode);
+      JsonNode root = new ObjectMapper().readTree(Files.readAllBytes(output));
+      assertTrue(root.path("sqls").isArray());
+    } finally {
+      Files.deleteIfExists(output);
+    }
+  }
+
   private static JsonNode originOfType(JsonNode sqls, String sourceType) {
+    return originOfType(sqls, sourceType, null);
+  }
+
+  private static JsonNode originOfType(JsonNode sqls, String sourceType, String framework) {
     for (JsonNode sql : sqls) {
       JsonNode origin = sql.get("origin");
-      if (origin != null && sourceType.equals(origin.path("sourceType").asText())) {
+      if (origin != null
+          && sourceType.equals(origin.path("sourceType").asText())
+          && (framework == null || framework.equals(origin.path("framework").asText()))) {
         return origin;
       }
     }
-    throw new AssertionError("no origin with sourceType=" + sourceType);
+    throw new AssertionError("no origin with sourceType=" + sourceType + ", framework=" + framework);
   }
 
   @Test

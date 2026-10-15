@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="legacy.shared">
+  <sql id="table">orders</sql>
+  <sql id="cycleA"><include refid="legacy.shared.cycleB"/></sql>
+  <sql id="cycleB"><include refid="legacy.shared.cycleA"/></sql>
+  <select id="cyclic">SELECT * FROM <include refid="cycleA"/></select>
+</sqlMap>

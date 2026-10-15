@@ -19,8 +19,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.w3c.dom.Element;
 
 public class ScanEngine {
   private final ScannerConfig config;
@@ -37,7 +39,8 @@ public class ScanEngine {
 
   public ScanReport scan(List<Path> paths, List<String> includes, List<String> excludes) throws Exception {
     List<Path> files = discover(paths, includes, excludes);
-    ExtractionContext context = new ExtractionContext(new SqlNormalizer());
+    Map<String, Element> globalFragments = MyBatisXmlExtractor.collectGlobalFragments(files);
+    ExtractionContext context = new ExtractionContext(new SqlNormalizer(), globalFragments);
     List<SqlObject> sqlObjects = new ArrayList<>();
     for (Path file : files) {
       for (SqlExtractor extractor : extractors) {

@@ -12,6 +12,7 @@ public final class AtFormatter {
     int line = origin.line();
     switch (origin.kind()) {
       case MYBATIS_XML:
+      case IBATIS_XML:
         return mybatisXml(origin, fileName, line);
       case MYBATIS_ANNOTATION:
       case JAVA_JDBC:
