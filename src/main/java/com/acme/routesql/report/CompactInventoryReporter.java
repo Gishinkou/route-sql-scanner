@@ -8,6 +8,8 @@ import com.acme.routesql.util.AtFormatter;
 import com.acme.routesql.util.OriginPaths;
 import com.acme.routesql.util.SqlKey;
 import com.acme.routesql.util.Strings;
+import com.acme.routesql.extract.mybatis.MyBatisTemplateRenderer;
+import com.acme.routesql.extract.mybatis.ParameterScenarios;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import java.nio.file.Path;
@@ -22,19 +24,27 @@ public class CompactInventoryReporter implements Reporter {
 
   private final ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
   private final Path projectRoot;
+  private final Map<String, Object> scenarios;
 
   public CompactInventoryReporter() {
     this(null);
   }
 
   public CompactInventoryReporter(Path projectRoot) {
+    this(projectRoot, java.util.Collections.emptyMap());
+  }
+
+  public CompactInventoryReporter(Path projectRoot, Map<String, Object> scenarios) {
     this.projectRoot = projectRoot;
+    this.scenarios = scenarios;
   }
 
   @Override
   public String render(ScanReport report) throws Exception {
+    ParameterScenarios.validateFor(scenarios, report);
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("v", SCHEMA_VERSION);
+    if (!scenarios.isEmpty()) out.put("requiredCapabilities", java.util.Collections.singletonList(ParameterScenarios.CAPABILITY));
     if (report.project() != null && !Strings.isBlank(report.project())) {
       out.put("project", report.project());
     }
@@ -46,6 +56,8 @@ public class CompactInventoryReporter implements Reporter {
       row.put("sourceStatementId", SqlKey.sourceStatementId(projectRoot, so));
       row.put("at", AtFormatter.format(so.origin()));
       row.put("sql", so.rawSql());
+      if (so.template() != null) row.put("template", so.template());
+      addScenarios(row, so);
       if (so.dynamic()) {
         row.put("dynamic", true);
       }
@@ -57,6 +69,26 @@ public class CompactInventoryReporter implements Reporter {
     }
     out.put("sqls", sqls);
     return mapper.writeValueAsString(out);
+  }
+
+  @SuppressWarnings("unchecked")
+  private void addScenarios(Map<String, Object> row, SqlObject sql) {
+    Object byStatement = scenarios.get("statements");
+    if (!(byStatement instanceof Map) || sql.origin() == null) return;
+    String key = sql.origin().namespace() + "." + sql.origin().statementId();
+    Object witnesses = ((Map<?, ?>) byStatement).get(key);
+    if (!(witnesses instanceof List)) return;
+    List<Map<String, Object>> rendered = new ArrayList<>();
+    for (Object value : (List<?>) witnesses) {
+      if (!(value instanceof Map)) throw new IllegalArgumentException("Parameter scenario must be an object");
+      Map<String, Object> witness = (Map<String, Object>) value;
+      Map<String, Object> scenario = MyBatisTemplateRenderer.render(sql.template(),
+          (Map<String, Object>) witness.get("parameters"), (Map<String, String>) scenarios.get("helperClassHashes"));
+      scenario.put("id", witness.get("id"));
+      rendered.add(scenario);
+    }
+    row.put("renderedScenarios", rendered);
+    row.put("scenarioCoverage", "SAMPLED");
   }
 
   private Map<String, Object> origin(SqlOrigin origin) {

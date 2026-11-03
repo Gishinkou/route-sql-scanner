@@ -1,16 +1,25 @@
 package com.acme.routesql.model;
 
 import java.util.Objects;
+import java.util.Map;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 
 public final class SqlObject {
   private final SqlOrigin origin;
   private final String rawSql;
   private final boolean dynamic;
+  private final Map<String, Object> template;
 
   public SqlObject(SqlOrigin origin, String rawSql, boolean dynamic) {
+    this(origin, rawSql, dynamic, null);
+  }
+
+  private SqlObject(SqlOrigin origin, String rawSql, boolean dynamic, Map<String, Object> template) {
     this.origin = origin;
     this.rawSql = rawSql;
     this.dynamic = dynamic;
+    this.template = template == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(template));
   }
 
   public SqlOrigin origin() {
@@ -23,6 +32,12 @@ public final class SqlObject {
 
   public boolean dynamic() {
     return dynamic;
+  }
+
+  public Map<String, Object> template() { return template; }
+
+  public SqlObject withTemplate(Map<String, Object> template) {
+    return new SqlObject(origin, rawSql, dynamic, template);
   }
 
   @Override

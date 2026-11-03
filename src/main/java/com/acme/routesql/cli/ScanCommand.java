@@ -2,6 +2,7 @@ package com.acme.routesql.cli;
 
 import com.acme.routesql.config.ScannerConfig;
 import com.acme.routesql.core.ScanEngine;
+import com.acme.routesql.extract.mybatis.ParameterScenarios;
 import com.acme.routesql.model.ScanReport;
 import com.acme.routesql.report.CompactInventoryReporter;
 import com.acme.routesql.report.Reporter;
@@ -39,6 +40,9 @@ public class ScanCommand implements Callable<Integer> {
   @Option(names = "--output", description = "Output file. Defaults to stdout.")
   private Path output;
 
+  @Option(names = "--parameter-scenarios", description = "JSON parameter witnesses keyed by namespace.statementId; rendered by native MyBatis.")
+  private Path parameterScenarios;
+
   @Option(names = "--include", description = "Glob include. Repeatable.")
   private List<String> includes = new ArrayList<>();
 
@@ -52,7 +56,10 @@ public class ScanCommand implements Callable<Integer> {
       ScanReport report = new ScanEngine(config).scan(paths, includes, excludes);
       Path resolvedProjectRoot = resolveProjectRoot(config);
       report = SqlKeyAllowlist.filter(report, resolvedProjectRoot, sqlKeyAllowlist);
-      Reporter reporter = new CompactInventoryReporter(resolvedProjectRoot);
+      @SuppressWarnings("unchecked")
+      java.util.Map<String, Object> scenarios = parameterScenarios == null
+          ? java.util.Collections.emptyMap() : ParameterScenarios.load(parameterScenarios);
+      Reporter reporter = new CompactInventoryReporter(resolvedProjectRoot, scenarios);
       byte[] rendered = reporter.renderBytes(report);
       if (output == null) {
         System.out.write(rendered);

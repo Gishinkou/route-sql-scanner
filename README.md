@@ -1,5 +1,7 @@
 # route-sql-scanner
 
+2026-10-20 实现补充：[MyBatis 参数见证与原生模板渲染](docs/parameter-witnesses.md)。下文为历史 V0 设计草案；当前新增路径使用 MyBatis 3.5.14，保留条件和 include，并输出真实 BoundSql 与绑定参数。
+
 这是一篇项目启动文档：定位是：先把“静态 SQL 提取 + 统一对象模型 + 表名/路由字段诊断 + 报告输出”跑通。
 
 **项目文档 v0.1**

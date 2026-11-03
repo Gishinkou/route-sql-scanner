@@ -51,6 +51,7 @@ public class MyBatisXmlExtractor implements SqlExtractor {
           continue;
         }
         Document doc = parseDocument(xml);
+        doc.setDocumentURI(file.toAbsolutePath().normalize().toString());
         if (IBatisSqlMapNormalizer.isIBatis(doc)) {
           doc = IBatisSqlMapNormalizer.normalize(doc, file);
         }
@@ -62,6 +63,9 @@ public class MyBatisXmlExtractor implements SqlExtractor {
         for (Element child : MyBatisSqlScriptBuilder.childElements(mapper)) {
           if ("sql".equals(child.getTagName())) {
             String id = child.getAttribute("id");
+            // Retain every definition for native template ambiguity checks. The legacy
+            // shorthand lookup remains unchanged for older inventory consumers.
+            global.put("@source:" + file.toAbsolutePath().normalize() + "#" + id, child);
             global.putIfAbsent(id, child);
             if (namespace != null && !namespace.isEmpty()) {
               global.putIfAbsent(namespace + "." + id, child);
@@ -83,6 +87,7 @@ public class MyBatisXmlExtractor implements SqlExtractor {
     }
 
     Document document = parseDocument(xml);
+    document.setDocumentURI(path.toAbsolutePath().normalize().toString());
     boolean ibatis = IBatisSqlMapNormalizer.isIBatis(document);
     if (ibatis) {
       document = IBatisSqlMapNormalizer.normalize(document, path);
@@ -119,7 +124,9 @@ public class MyBatisXmlExtractor implements SqlExtractor {
           null,
           null
       );
-      objects.add(SqlObjects.create(raw, origin, dynamic));
+      SqlObject object = SqlObjects.create(raw, origin, dynamic);
+      if (!ibatis) object = object.withTemplate(MyBatisTemplates.capture(statement, fragments));
+      objects.add(object);
 
       for (Element selectKey : MyBatisSqlScriptBuilder.childElements(statement)) {
         if (!"selectKey".equals(selectKey.getTagName())) {
@@ -144,7 +151,9 @@ public class MyBatisXmlExtractor implements SqlExtractor {
             null,
             null
         );
-        objects.add(SqlObjects.create(keyRaw, keyOrigin, keyDynamic));
+        SqlObject keyObject = SqlObjects.create(keyRaw, keyOrigin, keyDynamic);
+        if (!ibatis) keyObject = keyObject.withTemplate(MyBatisTemplates.capture(selectKey, fragments));
+        objects.add(keyObject);
       }
     }
     return objects;
