@@ -1,5 +1,25 @@
 # MyBatis 参数见证
 
+2026-11-05：原生模板采集覆盖 MyBatis 注解。字面量、字符串数组及当前编译单元内可证明的 `static final String` / 接口字符串常量会保留原始 SQL 或 `<script>`；不执行常量初始化方法或 Provider。跨文件未解析常量、循环引用和 Provider 仍输出原语句身份及 `ANNOTATION_SQL_UNRESOLVED` 缺口，不静默丢弃。明确 JSON 参数或字符串字面量可证明接收者类型时，支持原生 `String.equals/equalsIgnoreCase`；其他业务方法仍不开放。
+
+同样允许原生 `String.split` 的单参数形式，但分隔符必须为单个字面字符，且不含正则元字符。动态参数分隔符、正则、二参数重载及接收者上的业务方法链仍拒绝。显式 JSON null 只保留原生分支保护/空值异常语义；缺失属性不能视为 null。安全检查仍覆盖全部表达式，不因分支当前未选中而执行或开放任意方法。补充见证仍为 `SAMPLED`，不能据此将整个模板判为支持。
+
+多模块或同仓不同部署可传 `--mapper-resource-context factory-resources.json`，文件格式为：
+
+```json
+{
+  "version": "mybatis-resource-context/v1",
+  "contexts": [
+    {
+      "contextId": "deployment-a/sqlSessionFactory",
+      "resourcePaths": ["app-a/src/main/resources/mapper/Orders.xml", "common/src/main/resources/mapper/Columns.xml"]
+    }
+  ]
+}
+```
+
+资源必须是相对于 `--project-root` 的实际文件，范围来自已证明的 Factory 注册配置，不能仅凭目录邻近猜测。此输入仅限制原生模板 include 的可见片段；全量定义、归一 SQL、`sqlKey` 和 `sourceStatementId` 保持原身份，后续再用原有 allowlist 选择送检定义。一个语句文件只命中一个 Factory 时按该资源集展开；同一个 Factory 内真正的同名片段冲突仍未解析。未命中任何显式资源集的语句保留缺口。一个语句被多个 Factory 加载且展开结果不同，`template.templatesByContext` 保留各上下文模板，总体 `UNRESOLVED`；按 Factory 分别提供资源集后渲染，不任意选一个。资源上下文不证明实际部署已经加载。
+
 日期：2026-10-20。状态：本地源码及真实四应用模板回归已验证，未发布。
 
 MyBatis XML 的 compact v2 条目新增可选 `template`，保存原始条件树、空 otherwise、原生 include 展开后的脚本、条件路径、片段来源和 SHA256。静态占位语句及独立 selectKey 也可使用参数见证。include 按 MyBatis namespace/property 规则展开；缺失、循环或被引用的重名冲突片段标 `UNRESOLVED`。原有 `sql`、`sqlKey`、`sourceStatementId` 保持旧合同，不将匿名分支拼接结果当作参数见证。

@@ -10,6 +10,8 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 import java.io.StringWriter;
+import java.io.ByteArrayInputStream;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -25,10 +27,50 @@ import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Document;
 
 /** Preserve the real template and use MyBatis's namespace/property-aware include expansion. */
 public final class MyBatisTemplates {
   private MyBatisTemplates() {}
+
+  /** Match XMLLanguageDriver: only an explicit script root is parsed as dynamic XML. */
+  public static Map<String, Object> captureAnnotation(String sql, Path source) {
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("format", "mybatis-template/v1");
+    out.put("sourcePath", source.toAbsolutePath().normalize().toString());
+    try {
+      out.put("statementSha256", sha(sql));
+      // MapperAnnotationBuilder joins the annotation strings and trims before XMLLanguageDriver.
+      sql = sql.trim();
+      DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+      factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+      factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+      factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+      factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+      Document document;
+      if (sql.startsWith("<script>")) {
+        document = factory.newDocumentBuilder().parse(new ByteArrayInputStream(sql.getBytes(StandardCharsets.UTF_8)));
+      } else {
+        document = factory.newDocumentBuilder().newDocument();
+        Element script = document.createElement("script");
+        script.appendChild(document.createTextNode(sql));
+        document.appendChild(script);
+      }
+      Element script = document.getDocumentElement();
+      List<Map<String, Object>> conditions = new ArrayList<>();
+      conditions(script, "/script", conditions);
+      out.put("status", "READY");
+      out.put("script", xml(script));
+      out.put("scriptSha256", sha(xml(script)));
+      out.put("includes", java.util.Collections.emptyList());
+      out.put("conditions", conditions);
+    } catch (Exception e) {
+      out.put("status", "UNRESOLVED");
+      out.put("error", e.getClass().getName() + ": " + e.getMessage());
+    }
+    return out;
+  }
 
   public static Map<String, Object> capture(Element statement, Map<String, Element> fragments) {
     Map<String, Object> out = new LinkedHashMap<>();

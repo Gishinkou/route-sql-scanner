@@ -6,6 +6,7 @@ import com.acme.routesql.extract.SqlExtractor;
 import com.acme.routesql.extract.java.JavaJdbcStatementExtractor;
 import com.acme.routesql.extract.mybatis.MyBatisAnnotationExtractor;
 import com.acme.routesql.extract.mybatis.MyBatisXmlExtractor;
+import com.acme.routesql.extract.mybatis.MyBatisResourceContexts;
 import com.acme.routesql.model.ScanReport;
 import com.acme.routesql.model.SqlObject;
 import com.acme.routesql.normalize.SqlNormalizer;
@@ -27,9 +28,15 @@ import org.w3c.dom.Element;
 public class ScanEngine {
   private final ScannerConfig config;
   private final List<SqlExtractor> extractors;
+  private final MyBatisResourceContexts resourceContexts;
 
   public ScanEngine(ScannerConfig config) {
+    this(config, null);
+  }
+
+  public ScanEngine(ScannerConfig config, MyBatisResourceContexts resourceContexts) {
     this.config = config;
+    this.resourceContexts = resourceContexts;
     this.extractors = Arrays.asList(
         new MyBatisXmlExtractor(),
         new MyBatisAnnotationExtractor(),
@@ -39,8 +46,12 @@ public class ScanEngine {
 
   public ScanReport scan(List<Path> paths, List<String> includes, List<String> excludes) throws Exception {
     List<Path> files = discover(paths, includes, excludes);
-    Map<String, Element> globalFragments = MyBatisXmlExtractor.collectGlobalFragments(files);
-    ExtractionContext context = new ExtractionContext(new SqlNormalizer(), globalFragments);
+    List<Path> fragmentFiles = new ArrayList<>(files);
+    if (resourceContexts != null) {
+      for (Path path : resourceContexts.resources()) if (!fragmentFiles.contains(path)) fragmentFiles.add(path);
+    }
+    Map<String, Element> globalFragments = MyBatisXmlExtractor.collectGlobalFragments(fragmentFiles);
+    ExtractionContext context = new ExtractionContext(new SqlNormalizer(), globalFragments, resourceContexts);
     List<SqlObject> sqlObjects = new ArrayList<>();
     for (Path file : files) {
       for (SqlExtractor extractor : extractors) {

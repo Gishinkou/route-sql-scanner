@@ -125,7 +125,7 @@ public class MyBatisXmlExtractor implements SqlExtractor {
           null
       );
       SqlObject object = SqlObjects.create(raw, origin, dynamic);
-      if (!ibatis) object = object.withTemplate(MyBatisTemplates.capture(statement, fragments));
+      if (!ibatis) object = object.withTemplate(context.captureTemplate(statement, fragments));
       objects.add(object);
 
       for (Element selectKey : MyBatisSqlScriptBuilder.childElements(statement)) {
@@ -152,7 +152,7 @@ public class MyBatisXmlExtractor implements SqlExtractor {
             null
         );
         SqlObject keyObject = SqlObjects.create(keyRaw, keyOrigin, keyDynamic);
-        if (!ibatis) keyObject = keyObject.withTemplate(MyBatisTemplates.capture(selectKey, fragments));
+        if (!ibatis) keyObject = keyObject.withTemplate(context.captureTemplate(selectKey, fragments));
         objects.add(keyObject);
       }
     }

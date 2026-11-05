@@ -3,6 +3,7 @@ package com.acme.routesql.cli;
 import com.acme.routesql.config.ScannerConfig;
 import com.acme.routesql.core.ScanEngine;
 import com.acme.routesql.extract.mybatis.ParameterScenarios;
+import com.acme.routesql.extract.mybatis.MyBatisResourceContexts;
 import com.acme.routesql.model.ScanReport;
 import com.acme.routesql.report.CompactInventoryReporter;
 import com.acme.routesql.report.Reporter;
@@ -43,6 +44,9 @@ public class ScanCommand implements Callable<Integer> {
   @Option(names = "--parameter-scenarios", description = "JSON parameter witnesses keyed by namespace.statementId; rendered by native MyBatis.")
   private Path parameterScenarios;
 
+  @Option(names = "--mapper-resource-context", description = "Explicit SqlSessionFactory resource context JSON; preserves full inventory identities.")
+  private Path mapperResourceContext;
+
   @Option(names = "--include", description = "Glob include. Repeatable.")
   private List<String> includes = new ArrayList<>();
 
@@ -53,8 +57,10 @@ public class ScanCommand implements Callable<Integer> {
   public Integer call() {
     try {
       ScannerConfig config = ScannerConfig.load(configPath);
-      ScanReport report = new ScanEngine(config).scan(paths, includes, excludes);
       Path resolvedProjectRoot = resolveProjectRoot(config);
+      MyBatisResourceContexts resources = mapperResourceContext == null ? null
+          : MyBatisResourceContexts.load(mapperResourceContext, resolvedProjectRoot);
+      ScanReport report = new ScanEngine(config, resources).scan(paths, includes, excludes);
       report = SqlKeyAllowlist.filter(report, resolvedProjectRoot, sqlKeyAllowlist);
       @SuppressWarnings("unchecked")
       java.util.Map<String, Object> scenarios = parameterScenarios == null
