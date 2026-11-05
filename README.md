@@ -1,5 +1,16 @@
 # route-sql-scanner
 
+当前版本 **1.1.1**，构建和运行基线为 **JDK 8**。当前 CLI 采集 SQL inventory；完整参数以 `scan --help` 为准。
+
+```bash
+JAVA_HOME=/path/to/jdk8 mvn clean verify
+/path/to/jdk8/bin/java -jar target/route-sql-scanner-1.1.1.jar scan \
+  --path /path/to/project --project-root /path/to/project \
+  --output /path/to/route-sql-inventory.json
+```
+
+使用 `--mapper-resource-context <JSON>` 时，MyBatis XML 的 include 按显式 SqlSessionFactory 资源范围展开；未解析项保留缺口与真实参数样例。`--parameter-scenarios <JSON>` 的格式见下方实现补充。
+
 2026-10-20 实现补充：[MyBatis 参数见证与原生模板渲染](docs/parameter-witnesses.md)。下文为历史 V0 设计草案；当前新增路径使用 MyBatis 3.5.14，保留条件和 include，并输出真实 BoundSql 与绑定参数。
 
 这是一篇项目启动文档：定位是：先把“静态 SQL 提取 + 统一对象模型 + 表名/路由字段诊断 + 报告输出”跑通。

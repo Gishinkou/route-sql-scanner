@@ -39,7 +39,7 @@ MyBatis XML 的 compact v2 条目新增可选 `template`，保存原始条件树
 键严格为 `namespace + "." + statementId`，即使旧 statementId 自带 namespace 也保留。参数只能是 JSON 数据；不构造业务对象或执行 Mapper/JDBC。
 
 ```sh
-java -jar target/route-sql-scanner-1.1.0.jar scan \
+java -jar target/route-sql-scanner-1.1.1.jar scan \
   --path /absolute/project/src/main/resources/mapper \
   --project-root /absolute/project \
   --parameter-scenarios /absolute/parameters.json \
