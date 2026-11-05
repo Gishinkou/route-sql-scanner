@@ -9,6 +9,7 @@ import com.acme.routesql.util.OriginPaths;
 import com.acme.routesql.util.SqlKey;
 import com.acme.routesql.util.Strings;
 import com.acme.routesql.extract.mybatis.MyBatisTemplateRenderer;
+import com.acme.routesql.extract.mybatis.MyBatisResourceContexts;
 import com.acme.routesql.extract.mybatis.ParameterScenarios;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -25,6 +26,7 @@ public class CompactInventoryReporter implements Reporter {
   private final ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
   private final Path projectRoot;
   private final Map<String, Object> scenarios;
+  private final boolean factoryScoped;
 
   public CompactInventoryReporter() {
     this(null);
@@ -35,8 +37,13 @@ public class CompactInventoryReporter implements Reporter {
   }
 
   public CompactInventoryReporter(Path projectRoot, Map<String, Object> scenarios) {
+    this(projectRoot, scenarios, false);
+  }
+
+  public CompactInventoryReporter(Path projectRoot, Map<String, Object> scenarios, boolean factoryScoped) {
     this.projectRoot = projectRoot;
     this.scenarios = scenarios;
+    this.factoryScoped = factoryScoped;
   }
 
   @Override
@@ -44,7 +51,10 @@ public class CompactInventoryReporter implements Reporter {
     ParameterScenarios.validateFor(scenarios, report);
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("v", SCHEMA_VERSION);
-    if (!scenarios.isEmpty()) out.put("requiredCapabilities", java.util.Collections.singletonList(ParameterScenarios.CAPABILITY));
+    if (factoryScoped) out.put("factoryScopedSql", MyBatisResourceContexts.VERSION);
+    if (!scenarios.isEmpty() || report.sqlObjects().stream().anyMatch(this::hasScopedGap)) {
+      out.put("requiredCapabilities", java.util.Collections.singletonList(ParameterScenarios.CAPABILITY));
+    }
     if (report.project() != null && !Strings.isBlank(report.project())) {
       out.put("project", report.project());
     }
@@ -74,10 +84,22 @@ public class CompactInventoryReporter implements Reporter {
   @SuppressWarnings("unchecked")
   private void addScenarios(Map<String, Object> row, SqlObject sql) {
     Object byStatement = scenarios.get("statements");
-    if (!(byStatement instanceof Map) || sql.origin() == null) return;
-    String key = sql.origin().namespace() + "." + sql.origin().statementId();
-    Object witnesses = ((Map<?, ?>) byStatement).get(key);
-    if (!(witnesses instanceof List)) return;
+    Object witnesses = null;
+    if (byStatement instanceof Map && sql.origin() != null) {
+      String key = sql.origin().namespace() + "." + sql.origin().statementId();
+      witnesses = ((Map<?, ?>) byStatement).get(key);
+    }
+    if (!(witnesses instanceof List)) {
+      if (hasScopedGap(sql)) {
+        Map<String, Object> gap = new LinkedHashMap<>();
+        gap.put("id", "mapper-resource-context-unresolved");
+        gap.put("status", "UNRENDERABLE");
+        gap.put("error", sql.template().get("error"));
+        row.put("renderedScenarios", java.util.Collections.singletonList(gap));
+        row.put("scenarioCoverage", "UNRESOLVED_RESOURCE_CONTEXT");
+      }
+      return;
+    }
     List<Map<String, Object>> rendered = new ArrayList<>();
     for (Object value : (List<?>) witnesses) {
       if (!(value instanceof Map)) throw new IllegalArgumentException("Parameter scenario must be an object");
@@ -85,10 +107,16 @@ public class CompactInventoryReporter implements Reporter {
       Map<String, Object> scenario = MyBatisTemplateRenderer.render(sql.template(),
           (Map<String, Object>) witness.get("parameters"), (Map<String, String>) scenarios.get("helperClassHashes"));
       scenario.put("id", witness.get("id"));
+      if (hasScopedGap(sql)) scenario.put("error", sql.template().get("error"));
       rendered.add(scenario);
     }
     row.put("renderedScenarios", rendered);
     row.put("scenarioCoverage", "SAMPLED");
+  }
+
+  private boolean hasScopedGap(SqlObject sql) {
+    return sql.template() != null && sql.template().containsKey("resourceContextIds")
+        && !"READY".equals(sql.template().get("status"));
   }
 
   private Map<String, Object> origin(SqlOrigin origin) {

@@ -65,7 +65,7 @@ public class ScanCommand implements Callable<Integer> {
       @SuppressWarnings("unchecked")
       java.util.Map<String, Object> scenarios = parameterScenarios == null
           ? java.util.Collections.emptyMap() : ParameterScenarios.load(parameterScenarios);
-      Reporter reporter = new CompactInventoryReporter(resolvedProjectRoot, scenarios);
+      Reporter reporter = new CompactInventoryReporter(resolvedProjectRoot, scenarios, resources != null);
       byte[] rendered = reporter.renderBytes(report);
       if (output == null) {
         System.out.write(rendered);

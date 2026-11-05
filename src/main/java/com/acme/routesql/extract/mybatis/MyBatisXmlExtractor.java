@@ -106,8 +106,9 @@ public class MyBatisXmlExtractor implements SqlExtractor {
         continue;
       }
       String statementId = statement.getAttribute("id");
+      Map<String, Object> template = ibatis ? null : context.captureTemplate(statement, fragments);
       MyBatisSqlScriptBuilder.BuildResult built =
-          MyBatisSqlScriptBuilder.buildChildren(statement, fragments);
+          buildStatement(statement, fragments, template);
       String raw = context.normalizer().normalizeMyBatisParameters(built.sql());
       boolean dynamic = built.dynamic() || raw.contains("__DYNAMIC__")
           || raw.contains("__IBATIS_UNKNOWN_TAG_");
@@ -125,15 +126,15 @@ public class MyBatisXmlExtractor implements SqlExtractor {
           null
       );
       SqlObject object = SqlObjects.create(raw, origin, dynamic);
-      if (!ibatis) object = object.withTemplate(context.captureTemplate(statement, fragments));
+      if (template != null) object = object.withTemplate(template);
       objects.add(object);
 
       for (Element selectKey : MyBatisSqlScriptBuilder.childElements(statement)) {
         if (!"selectKey".equals(selectKey.getTagName())) {
           continue;
         }
-        MyBatisSqlScriptBuilder.BuildResult keyBuilt =
-            MyBatisSqlScriptBuilder.buildChildren(selectKey, fragments);
+        Map<String, Object> keyTemplate = ibatis ? null : context.captureTemplate(selectKey, fragments);
+        MyBatisSqlScriptBuilder.BuildResult keyBuilt = buildStatement(selectKey, fragments, keyTemplate);
         String keyRaw = context.normalizer().normalizeMyBatisParameters(keyBuilt.sql());
         if (Strings.isBlank(keyRaw)) {
           continue;
@@ -152,11 +153,30 @@ public class MyBatisXmlExtractor implements SqlExtractor {
             null
         );
         SqlObject keyObject = SqlObjects.create(keyRaw, keyOrigin, keyDynamic);
-        if (!ibatis) keyObject = keyObject.withTemplate(context.captureTemplate(selectKey, fragments));
+        if (keyTemplate != null) keyObject = keyObject.withTemplate(keyTemplate);
         objects.add(keyObject);
       }
     }
     return objects;
+  }
+
+  private MyBatisSqlScriptBuilder.BuildResult buildStatement(Element statement,
+      Map<String, Element> fragments, Map<String, Object> template) {
+    if (template == null || !template.containsKey("resourceContextIds")) {
+      return MyBatisSqlScriptBuilder.buildChildren(statement, fragments);
+    }
+    // A scoped inventory must never flatten an include from the global resource set.
+    // The captured script has already been expanded by MyBatis within its factory.
+    if ("READY".equals(template.get("status"))) {
+      try {
+        Element resolved = parseDocument(String.valueOf(template.get("script"))).getDocumentElement();
+        return MyBatisSqlScriptBuilder.buildChildren(resolved, Collections.emptyMap());
+      } catch (Exception e) {
+        template.put("status", "UNRESOLVED");
+        template.put("error", e.getClass().getName() + ": " + e.getMessage());
+      }
+    }
+    return new MyBatisSqlScriptBuilder.BuildResult("__DYNAMIC__", true);
   }
 
   private static Document parseDocument(String xml) throws Exception {
