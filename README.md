@@ -1,10 +1,10 @@
 # route-sql-scanner
 
-当前版本 **1.1.2**，构建和运行基线为 **JDK 8**。当前 CLI 采集 SQL inventory，完整参数以 `scan --help` 为准。
+当前版本 **1.1.3**，构建和运行基线为 **JDK 8**。当前 CLI 采集 SQL inventory，完整参数以 `scan --help` 为准。
 
 ```bash
 JAVA_HOME=/path/to/jdk8 mvn clean verify
-/path/to/jdk8/bin/java -jar target/route-sql-scanner-1.1.2.jar scan \
+/path/to/jdk8/bin/java -jar target/route-sql-scanner-1.1.3.jar scan \
   --path /path/to/project --project-root /path/to/project \
   --output /path/to/route-sql-inventory.json
 ```

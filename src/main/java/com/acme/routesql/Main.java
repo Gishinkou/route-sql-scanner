@@ -7,7 +7,7 @@ import picocli.CommandLine.Option;
 
 @Command(
     name = "route-sql-scanner",
-    version = "route-sql-scanner 1.1.2",
+    version = "route-sql-scanner 1.1.3",
     subcommands = ScanCommand.class
 )
 public class Main implements Runnable {
