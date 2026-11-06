@@ -155,6 +155,7 @@ public class CompactInventoryReporter implements Reporter {
       case JAVA_JDBC:
         putIfPresent(out, "enclosingClass", origin.className());
         putIfPresent(out, "sourcePath", sourcePath);
+        if (origin.jdbcCallsite() != null) out.put("jdbcCallsite", origin.jdbcCallsite());
         break;
       default:
         // unreachable: sourceType(...) already filtered unknown kinds

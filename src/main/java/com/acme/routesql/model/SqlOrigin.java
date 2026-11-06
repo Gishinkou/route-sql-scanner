@@ -3,6 +3,9 @@ package com.acme.routesql.model;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 public final class SqlOrigin {
@@ -16,6 +19,7 @@ public final class SqlOrigin {
   private final String statementType;
   private final String className;
   private final String methodName;
+  private final Map<String, Object> jdbcCallsite;
 
   public SqlOrigin(
       SourceKind kind,
@@ -27,6 +31,20 @@ public final class SqlOrigin {
       String statementType,
       String className,
       String methodName) {
+    this(kind, file, line, column, namespace, statementId, statementType, className, methodName, null);
+  }
+
+  public SqlOrigin(
+      SourceKind kind,
+      Path file,
+      int line,
+      int column,
+      String namespace,
+      String statementId,
+      String statementType,
+      String className,
+      String methodName,
+      Map<String, Object> jdbcCallsite) {
     this.kind = kind;
     this.file = file;
     this.line = line;
@@ -36,6 +54,8 @@ public final class SqlOrigin {
     this.statementType = statementType;
     this.className = className;
     this.methodName = methodName;
+    this.jdbcCallsite = jdbcCallsite == null ? null
+        : Collections.unmodifiableMap(new LinkedHashMap<>(jdbcCallsite));
   }
 
   public SourceKind kind() {
@@ -74,6 +94,10 @@ public final class SqlOrigin {
     return methodName;
   }
 
+  public Map<String, Object> jdbcCallsite() {
+    return jdbcCallsite;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -91,13 +115,14 @@ public final class SqlOrigin {
         && Objects.equals(statementId, that.statementId)
         && Objects.equals(statementType, that.statementType)
         && Objects.equals(className, that.className)
-        && Objects.equals(methodName, that.methodName);
+        && Objects.equals(methodName, that.methodName)
+        && Objects.equals(jdbcCallsite, that.jdbcCallsite);
   }
 
   @Override
   public int hashCode() {
     return Objects.hash(
-        kind, file, line, column, namespace, statementId, statementType, className, methodName);
+        kind, file, line, column, namespace, statementId, statementType, className, methodName, jdbcCallsite);
   }
 
   @Override

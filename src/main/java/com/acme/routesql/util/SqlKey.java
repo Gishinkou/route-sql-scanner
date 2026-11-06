@@ -30,6 +30,7 @@ public final class SqlKey {
       write(canonical, origin == null ? null : origin.statementType());
       write(canonical, origin == null ? null : origin.className());
       write(canonical, origin == null ? null : origin.methodName());
+      writeJdbcCallsite(canonical, origin);
       write(canonical, canonicalSql(sqlObject.rawSql()));
       canonical.writeBoolean(sqlObject.dynamic());
       canonical.flush();
@@ -56,6 +57,7 @@ public final class SqlKey {
       write(canonical, origin == null ? null : origin.statementType());
       write(canonical, origin == null ? null : origin.className());
       write(canonical, origin == null ? null : origin.methodName());
+      writeJdbcCallsite(canonical, origin);
       canonical.flush();
       return "source-v1:" + hex(MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray()));
     } catch (Exception e) {
@@ -82,6 +84,12 @@ public final class SqlKey {
 
   private static String canonicalSql(String sql) {
     return sql == null ? null : sql.replaceAll("\\s+", " ").trim();
+  }
+
+  private static void writeJdbcCallsite(DataOutputStream out, SqlOrigin origin) throws Exception {
+    if (origin != null && origin.jdbcCallsite() != null) {
+      write(out, (String) origin.jdbcCallsite().get("id"));
+    }
   }
 
   private static String hex(byte[] digest) {
