@@ -2,19 +2,22 @@ package com.acme.routesql.extract.mybatis;
 
 import com.acme.routesql.model.ScanReport;
 import com.acme.routesql.model.SqlObject;
+import com.acme.routesql.model.SqlOrigin;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
-/** Explicit parameter inputs must be valid and consumed by exactly one source definition. */
+/** Assign explicit parameter inputs only to uniquely matched source definitions. */
 public final class ParameterScenarios {
   public static final String CAPABILITY = "native-parameter-witnesses/v1";
   private static final long MAX_BYTES = 1024L * 1024L;
@@ -36,20 +39,59 @@ public final class ParameterScenarios {
     return scenarios;
   }
 
-  public static void validateFor(Map<String, Object> scenarios, ScanReport report) {
-    if (scenarios == null || scenarios.isEmpty()) return;
+  public static MatchResult match(Map<String, Object> scenarios, ScanReport report) {
+    if (scenarios == null || scenarios.isEmpty()) {
+      return new MatchResult(Collections.emptyMap(), Collections.emptyList());
+    }
     validateSchema(scenarios);
     Map<?, ?> statements = (Map<?, ?>) scenarios.get("statements");
     Map<String, Integer> matches = new LinkedHashMap<>();
     for (SqlObject sql : report.sqlObjects()) {
-      if (sql.origin() == null || sql.origin().namespace() == null || sql.origin().statementId() == null) continue;
-      String key = sql.origin().namespace() + "." + sql.origin().statementId();
-      if (statements.containsKey(key)) matches.put(key, matches.getOrDefault(key, 0) + 1);
+      String key = statementKey(sql.origin());
+      if (statements.containsKey(key)) matches.merge(key, 1, Integer::sum);
     }
-    for (Object key : statements.keySet()) {
-      Integer count = matches.get(key);
-      if (count == null) throw new IllegalArgumentException("Unmatched parameter statement: " + key);
-      if (count != 1) throw new IllegalArgumentException("Ambiguous parameter statement: " + key);
+    Map<String, List<?>> assigned = new LinkedHashMap<>();
+    List<Map<String, Object>> gaps = new ArrayList<>();
+    for (Map.Entry<?, ?> entry : statements.entrySet()) {
+      String key = (String) entry.getKey();
+      List<?> witnesses = (List<?>) entry.getValue();
+      int count = matches.getOrDefault(key, 0);
+      if (count == 1) {
+        assigned.put(key, witnesses);
+        continue;
+      }
+      for (Object witness : witnesses) {
+        Map<String, Object> gap = new LinkedHashMap<>();
+        gap.put("statement", key);
+        gap.put("scenarioId", ((Map<?, ?>) witness).get("id"));
+        gap.put("reason", count == 0 ? "UNMATCHED_STATEMENT" : "AMBIGUOUS_STATEMENT");
+        gap.put("matchedStatementCount", count);
+        gaps.add(gap);
+      }
+    }
+    return new MatchResult(assigned, gaps);
+  }
+
+  private static String statementKey(SqlOrigin origin) {
+    return origin == null || origin.namespace() == null || origin.statementId() == null
+        ? null : origin.namespace() + "." + origin.statementId();
+  }
+
+  public static final class MatchResult {
+    private final Map<String, List<?>> assigned;
+    private final List<Map<String, Object>> gaps;
+
+    private MatchResult(Map<String, List<?>> assigned, List<Map<String, Object>> gaps) {
+      this.assigned = assigned;
+      this.gaps = gaps;
+    }
+
+    public List<?> witnessesFor(SqlOrigin origin) {
+      return assigned.get(statementKey(origin));
+    }
+
+    public List<Map<String, Object>> gaps() {
+      return gaps;
     }
   }
 

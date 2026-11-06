@@ -48,13 +48,14 @@ public class CompactInventoryReporter implements Reporter {
 
   @Override
   public String render(ScanReport report) throws Exception {
-    ParameterScenarios.validateFor(scenarios, report);
+    ParameterScenarios.MatchResult matched = ParameterScenarios.match(scenarios, report);
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("v", SCHEMA_VERSION);
     if (factoryScoped) out.put("factoryScopedSql", MyBatisResourceContexts.VERSION);
     if (!scenarios.isEmpty() || report.sqlObjects().stream().anyMatch(this::hasScopedGap)) {
       out.put("requiredCapabilities", java.util.Collections.singletonList(ParameterScenarios.CAPABILITY));
     }
+    if (!matched.gaps().isEmpty()) out.put("parameterScenarioGaps", matched.gaps());
     if (report.project() != null && !Strings.isBlank(report.project())) {
       out.put("project", report.project());
     }
@@ -67,7 +68,7 @@ public class CompactInventoryReporter implements Reporter {
       row.put("at", AtFormatter.format(so.origin()));
       row.put("sql", so.rawSql());
       if (so.template() != null) row.put("template", so.template());
-      addScenarios(row, so);
+      addScenarios(row, so, matched.witnessesFor(so.origin()));
       if (so.dynamic()) {
         row.put("dynamic", true);
       }
@@ -82,14 +83,8 @@ public class CompactInventoryReporter implements Reporter {
   }
 
   @SuppressWarnings("unchecked")
-  private void addScenarios(Map<String, Object> row, SqlObject sql) {
-    Object byStatement = scenarios.get("statements");
-    Object witnesses = null;
-    if (byStatement instanceof Map && sql.origin() != null) {
-      String key = sql.origin().namespace() + "." + sql.origin().statementId();
-      witnesses = ((Map<?, ?>) byStatement).get(key);
-    }
-    if (!(witnesses instanceof List)) {
+  private void addScenarios(Map<String, Object> row, SqlObject sql, List<?> witnesses) {
+    if (witnesses == null) {
       if (hasScopedGap(sql)) {
         Map<String, Object> gap = new LinkedHashMap<>();
         gap.put("id", "mapper-resource-context-unresolved");
@@ -101,8 +96,7 @@ public class CompactInventoryReporter implements Reporter {
       return;
     }
     List<Map<String, Object>> rendered = new ArrayList<>();
-    for (Object value : (List<?>) witnesses) {
-      if (!(value instanceof Map)) throw new IllegalArgumentException("Parameter scenario must be an object");
+    for (Object value : witnesses) {
       Map<String, Object> witness = (Map<String, Object>) value;
       Map<String, Object> scenario = MyBatisTemplateRenderer.render(sql.template(),
           (Map<String, Object>) witness.get("parameters"), (Map<String, String>) scenarios.get("helperClassHashes"));

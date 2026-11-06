@@ -51,16 +51,38 @@ class ParameterScenarioAdmissionTest {
   }
 
   @Test
-  void unknownOrAmbiguousStatementCannotSilentlyDiscardOrReuseWitness() throws Exception {
-    Path xml = write("one/Mapper.xml", "<mapper namespace='Orders'><select id='q'>select #{id}</select></mapper>");
-    Path unknown = write("unknown.json", "{\"statements\":{\"Other.q\":[{\"id\":\"p1\",\"parameters\":{\"id\":7}}]}}");
-    Path output = root.resolve("failed.json");
-    assertNotEquals(0, scan(xml, output, "--parameter-scenarios", unknown.toString()));
-    assertFalse(Files.exists(output));
-    write("two/Mapper.xml", "<mapper namespace='Orders'><select id='q'>select #{id}</select></mapper>");
-    Path parameters = write("parameters.json", "{\"statements\":{\"Orders.q\":[{\"id\":\"p1\",\"parameters\":{\"id\":7}}]}}");
-    assertNotEquals(0, scan(root, output, "--parameter-scenarios", parameters.toString()));
-    assertFalse(Files.exists(output));
+  void mixedBatchKeepsEveryDefinitionAndOnlyRendersUniquelyMatchedWitnesses() throws Exception {
+    write("one/Mapper.xml", "<mapper namespace='Orders'><select id='shared'>select #{id}</select>"
+        + "<select id='find'>select id from orders where id=#{id}</select>"
+        + "<select id='plain'>select 1</select></mapper>");
+    write("two/Mapper.xml", "<mapper namespace='Orders'><select id='shared'>select #{id} + 1</select></mapper>");
+    Path parameters = write("parameters.json", "{\"statements\":{"
+        + "\"Other.missing\":[{\"id\":\"missing-7\",\"parameters\":{\"id\":7}}],"
+        + "\"Orders.shared\":[{\"id\":\"ambiguous-8\",\"parameters\":{\"id\":8}}],"
+        + "\"Orders.find\":[{\"id\":\"good-9\",\"parameters\":{\"id\":9}}]}}");
+    Path output = root.resolve("mixed.json");
+    assertEquals(0, scan(root, output, "--parameter-scenarios", parameters.toString()));
+    JsonNode inventory = mapper.readTree(output.toFile());
+    assertEquals(mapper.readTree("[{\"statement\":\"Other.missing\",\"scenarioId\":\"missing-7\","
+            + "\"reason\":\"UNMATCHED_STATEMENT\",\"matchedStatementCount\":0},"
+            + "{\"statement\":\"Orders.shared\",\"scenarioId\":\"ambiguous-8\","
+            + "\"reason\":\"AMBIGUOUS_STATEMENT\",\"matchedStatementCount\":2}]"),
+        inventory.path("parameterScenarioGaps"));
+    JsonNode rows = inventory.path("sqls");
+    assertEquals(4, rows.size());
+    int rendered = 0;
+    for (JsonNode row : rows) {
+      if ("find".equals(row.path("origin").path("statementId").asText())) {
+        JsonNode witness = row.path("renderedScenarios").get(0);
+        assertEquals("good-9", witness.path("id").asText());
+        assertEquals("RENDERED", witness.path("status").asText());
+        assertEquals(9, witness.path("parameters").get(0).asInt());
+        rendered++;
+      } else {
+        assertFalse(row.has("renderedScenarios"), row.toString());
+      }
+    }
+    assertEquals(1, rendered);
   }
 
   @Test

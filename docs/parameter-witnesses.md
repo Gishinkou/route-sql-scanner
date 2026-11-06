@@ -38,8 +38,10 @@ MyBatis XML 的 compact v2 条目新增可选 `template`，保存原始条件树
 
 键严格为 `namespace + "." + statementId`，即使旧 statementId 自带 namespace 也保留。参数只能是 JSON 数据；不构造业务对象或执行 Mapper/JDBC。
 
+匹配范围是本次实际采集的定义，包括 SQL allowlist 的限制。一个键匹配零条或多条定义时，每个受影响样本在 inventory 顶层 `parameterScenarioGaps` 记录 `statement`、`scenarioId`、`reason` 和 `matchedStatementCount`。原因分别为 `UNMATCHED_STATEMENT` 或 `AMBIGUOUS_STATEMENT`。其余定义继续采集，唯一匹配的样本继续渲染。参数文件结构、重复键和重复样本 ID 仍按原约定校验。
+
 ```sh
-java -jar target/route-sql-scanner-1.1.1.jar scan \
+java -jar target/route-sql-scanner-1.1.2.jar scan \
   --path /absolute/project/src/main/resources/mapper \
   --project-root /absolute/project \
   --parameter-scenarios /absolute/parameters.json \
